@@ -5,7 +5,7 @@
 
 ## Clifzo Mail 自动部署
 
-Clifzo Mail 的生产 Worker `kitt-temp-email` 由 Cloudflare Workers Builds 部署。推送 GitHub 仓库 `emojiiii/cloudflare_temp_email` 的 `master` 会构建前端并发布到 `mail.kitt.tools`。该仓库已关闭 GitHub Actions。需要同步上游时，可手动更新默认分支 `main`。
+Clifzo Mail 的生产 Worker `kitt-temp-email` 由 Cloudflare Workers Builds 部署。推送 GitHub 仓库 `emojiiii/cloudflare_temp_email` 的默认分支 `master` 会构建前端并发布到 `mail.kitt.tools`。该仓库已关闭 GitHub Actions。
 
 | 构建设置 | 值 |
 | --- | --- |
@@ -17,6 +17,18 @@ Clifzo Mail 的生产 Worker `kitt-temp-email` 由 Cloudflare Workers Builds 部
 | pnpm | `10.10.0` |
 
 生产域名和资源绑定定义在 `worker/wrangler.toml`，运行时密钥保存在 Cloudflare。涉及 D1 架构的版本应在发布前对生产库执行相应迁移。构建进度可在 Worker 的「部署」页查看。
+
+### 同步上游
+
+在本地切到 `master`，拉取上游仓库的 `main` 并审阅变更。
+
+```bash
+git switch master
+git fetch https://github.com/dreamhunter2333/cloudflare_temp_email.git main
+git log --oneline master..FETCH_HEAD
+```
+
+审阅后运行 `git merge FETCH_HEAD`。检查合并后的部署配置和工作流，再运行 `git push origin master` 触发生产构建。
 
 ## 初始化项目
 

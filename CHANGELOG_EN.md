@@ -8,6 +8,8 @@
 
 ## v1.14.0(main)
 
+- docs: |Deployment| Document how to sync upstream `main` into the deployment branch `master`.
+
 - fix: |Deployment| Remove legacy GitHub Actions workflows and deploy `master` with Cloudflare Workers Builds.
 
 - docs: |Deployment| Document how Cloudflare Workers Builds deploys Clifzo Mail from GitHub `master`.

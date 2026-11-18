@@ -8,6 +8,8 @@
 
 ## v1.14.0(main)
 
+- docs: |部署| 记录从上游 `main` 同步到本站 `master` 的流程。
+
 - fix: |部署| 移除旧的 GitHub Actions 工作流，使用 Cloudflare Workers Builds 从 `master` 自动发布。
 
 - docs: |部署| 记录 Clifzo Mail 通过 Cloudflare Workers Builds 从 GitHub `master` 自动发布的配置。

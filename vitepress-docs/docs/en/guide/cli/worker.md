@@ -5,7 +5,7 @@
 
 ## Clifzo Mail automatic deployment
 
-Cloudflare Workers Builds deploys the production Worker `kitt-temp-email`. A push to `master` in `emojiiii/cloudflare_temp_email` builds the frontend and deploys it to `mail.kitt.tools`. GitHub Actions is disabled for this repository. Update the default branch `main` manually when syncing with upstream.
+Cloudflare Workers Builds deploys the production Worker `kitt-temp-email`. A push to the default branch `master` in `emojiiii/cloudflare_temp_email` builds the frontend and deploys it to `mail.kitt.tools`. GitHub Actions is disabled for this repository.
 
 | Build setting | Value |
 | --- | --- |
@@ -17,6 +17,18 @@ Cloudflare Workers Builds deploys the production Worker `kitt-temp-email`. A pus
 | pnpm | `10.10.0` |
 
 Production domains and resource bindings are defined in `worker/wrangler.toml`. Runtime secrets are stored in Cloudflare. Apply the corresponding D1 migrations to the production database before releasing schema changes. Follow build progress in the Worker's **Deployments** tab.
+
+### Sync with upstream
+
+Switch to your local `master`, fetch the upstream `main` branch, and review the changes.
+
+```bash
+git switch master
+git fetch https://github.com/dreamhunter2333/cloudflare_temp_email.git main
+git log --oneline master..FETCH_HEAD
+```
+
+After review, run `git merge FETCH_HEAD`. Check the deployment configuration and workflows in the merged result, then run `git push origin master` to trigger a production build.
 
 ## Initialize Project
 
