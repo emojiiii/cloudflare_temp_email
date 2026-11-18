@@ -14,6 +14,7 @@
 
 ### Improvements
 
+- docs: |README| Update the multilingual Clifzo Mail README with sample mailbox screenshots and Cloudflare deployment instructions.
 - docs: |Deployment| Sync upstream v1.15.0 and retain Cloudflare Workers Builds from `master`.
 
 ## v1.14.0

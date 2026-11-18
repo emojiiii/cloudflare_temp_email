@@ -14,6 +14,7 @@
 
 ### Improvements
 
+- docs: |项目说明| 更新 Clifzo Mail 的多语言 README，补充示例邮箱截图和 Cloudflare 部署说明。
 - docs: |部署| 同步上游 v1.15.0，保留从 `master` 自动部署的 Cloudflare Workers Builds 配置。
 
 ## v1.14.0
