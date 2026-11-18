@@ -6,7 +6,17 @@
   <a href="CHANGELOG_EN.md">English</a>
 </p>
 
-## v1.14.0(main)
+## v1.15.0(main)
+
+### Features
+
+### Bug Fixes
+
+### Improvements
+
+- docs: |Deployment| Sync upstream v1.15.0 and retain Cloudflare Workers Builds from `master`.
+
+## v1.14.0
 
 - docs: |Deployment| Document how to sync upstream `main` into the deployment branch `master`.
 
@@ -55,6 +65,7 @@
 - fix: |Login| Reuse the administrator session in the Inbox and User Center, where an administrator can select a mailbox.
 - fix: |Login| Use a standalone `/login` page for account sign-in, registration, and `admin` access. Accept a single administrator password as a Worker Secret.
 - fix: |Mail Translation| Translate the original emphasized text in context before arranging the surrounding prose, so adjacent time phrases stay outside the emphasis.
+- fix: |Site Authentication| Fail closed for malformed or non-string-array `PASSWORDS` configurations while preserving valid and empty configuration behavior
 - fix: |CI| Wait for save and test responses in Webhook UI tests to avoid flaky assertions against missing or stale requests
 - fix: |Auto Update| Support an optional `UPSTREAM_SYNC_TOKEN` to sync workflow changes, retain the default token when unset, and declare the contents write permission required for syncing
 - fix: |Inbox| Keep the current message and restore the page and page size when pagination fails

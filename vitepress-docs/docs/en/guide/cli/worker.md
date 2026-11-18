@@ -130,7 +130,7 @@ database_id = "xxx" # D1 database ID
 ```
 
 > [!NOTE]
-> To keep passwords out of `wrangler.toml`, `ADMIN_PASSWORDS` and `PASSWORDS` can also be set as secrets. A secret is always a string, so enter the list as a JSON array, e.g. `["my-password"]`. A bare `my-password` fails to parse and is treated as an empty list, so the admin console becomes inaccessible, or the site is left without a password.
+> You can store passwords as Worker Secrets. `ADMIN_PASSWORDS` accepts a single password or a JSON array of strings such as `["my-password"]`. Set `PASSWORDS` to a JSON array of strings to require a password for site access. Invalid configuration returns `500 / Invalid PASSWORDS configuration`.
 >
 > ```bash
 > pnpm wrangler secret put ADMIN_PASSWORDS

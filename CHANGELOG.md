@@ -6,7 +6,17 @@
   <a href="CHANGELOG_EN.md">English</a>
 </p>
 
-## v1.14.0(main)
+## v1.15.0(main)
+
+### Features
+
+### Bug Fixes
+
+### Improvements
+
+- docs: |部署| 同步上游 v1.15.0，保留从 `master` 自动部署的 Cloudflare Workers Builds 配置。
+
+## v1.14.0
 
 - docs: |部署| 记录从上游 `main` 同步到本站 `master` 的流程。
 
@@ -55,6 +65,7 @@
 - fix: |登录| 管理员可用同一会话打开收件箱和用户中心，并在用户中心选择要查看的邮箱。
 - fix: |登录| 使用独立全屏 `/login` 登录和注册，在同一表单处理用户邮箱和管理员 `admin`。管理员密码支持以单个值保存在 Worker Secret。
 - fix: |邮件翻译| 单独确定原加粗等已标记文字的译文，再调整同段普通文字语序，避免将相邻时间短语一并加粗。
+- fix: |站点认证| `PASSWORDS` 配置解析失败或不是字符串数组时拒绝访问，保留正常配置和空配置行为，避免误关闭站点密码保护
 - fix: |CI| Webhook UI 测试等待保存和测试请求响应，避免读取空记录或旧请求导致偶发失败
 - fix: |自动更新| 支持可选的 `UPSTREAM_SYNC_TOKEN` 同步 workflow 变更，未配置时保留默认 Token，并声明同步所需的内容写权限
 - fix: |收件箱| 分页请求失败时保留当前邮件，并恢复页码和每页条数
