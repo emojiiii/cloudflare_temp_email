@@ -5,7 +5,7 @@
 
 ## Clifzo Mail 自动部署
 
-Clifzo Mail 的生产 Worker `kitt-temp-email` 由 Cloudflare Workers Builds 部署。推送 GitHub 仓库 `emojiiii/cloudflare_temp_email` 的 `master` 会构建前端并发布到 `mail.kitt.tools`。默认分支 `main` 用于同步上游。
+Clifzo Mail 的生产 Worker `kitt-temp-email` 由 Cloudflare Workers Builds 部署。推送 GitHub 仓库 `emojiiii/cloudflare_temp_email` 的 `master` 会构建前端并发布到 `mail.kitt.tools`。该仓库已关闭 GitHub Actions。需要同步上游时，可手动更新默认分支 `main`。
 
 | 构建设置 | 值 |
 | --- | --- |

@@ -8,6 +8,8 @@
 
 ## v1.14.0(main)
 
+- fix: |Deployment| Remove legacy GitHub Actions workflows and deploy `master` with Cloudflare Workers Builds.
+
 - docs: |Deployment| Document how Cloudflare Workers Builds deploys Clifzo Mail from GitHub `master`.
 
 - fix: |Settings| Unify navigation across settings, keep a single Inbox entry and give unassigned mail and the mail webhook dedicated pages.

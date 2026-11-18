@@ -5,7 +5,7 @@
 
 ## Clifzo Mail automatic deployment
 
-Cloudflare Workers Builds deploys the production Worker `kitt-temp-email`. A push to `master` in `emojiiii/cloudflare_temp_email` builds the frontend and deploys it to `mail.kitt.tools`. The default branch `main` is used for upstream synchronization.
+Cloudflare Workers Builds deploys the production Worker `kitt-temp-email`. A push to `master` in `emojiiii/cloudflare_temp_email` builds the frontend and deploys it to `mail.kitt.tools`. GitHub Actions is disabled for this repository. Update the default branch `main` manually when syncing with upstream.
 
 | Build setting | Value |
 | --- | --- |

@@ -8,6 +8,8 @@
 
 ## v1.14.0(main)
 
+- fix: |部署| 移除旧的 GitHub Actions 工作流，使用 Cloudflare Workers Builds 从 `master` 自动发布。
+
 - docs: |部署| 记录 Clifzo Mail 通过 Cloudflare Workers Builds 从 GitHub `master` 自动发布的配置。
 
 - fix: |设置| 统一设置总览与子页导航，收件箱保留一个常用入口，无收件人邮件和邮件 Webhook 使用独立页面。
