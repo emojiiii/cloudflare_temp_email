@@ -137,6 +137,8 @@ dist
 wrangler.toml
 !/worker/wrangler.toml
 .dev.vars
+.playwright-cli/
+/frontend/auto-imports.d.ts
 pnpm-lock.yaml
 
 # E2E test artifacts

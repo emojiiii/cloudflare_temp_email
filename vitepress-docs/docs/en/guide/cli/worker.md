@@ -3,7 +3,24 @@
 > [!warning] Notice
 > The `worker.dev` domain is not accessible in China, please use a custom domain
 
+## Clifzo Mail automatic deployment
+
+Cloudflare Workers Builds deploys the production Worker `kitt-temp-email`. A push to `master` in `emojiiii/cloudflare_temp_email` builds the frontend and deploys it to `mail.kitt.tools`. The default branch `main` is used for upstream synchronization.
+
+| Build setting | Value |
+| --- | --- |
+| Production branch | `master` |
+| Root directory | `worker` |
+| Build command | `pnpm run build:assets` |
+| Deploy command | `pnpm run deploy` |
+| Node.js | `24` |
+| pnpm | `10.10.0` |
+
+Production domains and resource bindings are defined in `worker/wrangler.toml`. Runtime secrets are stored in Cloudflare. Apply the corresponding D1 migrations to the production database before releasing schema changes. Follow build progress in the Worker's **Deployments** tab.
+
 ## Initialize Project
+
+Use the following commands when creating a separate Worker instance.
 
 ```bash
 cd worker

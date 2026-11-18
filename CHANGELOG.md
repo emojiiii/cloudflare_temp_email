@@ -8,6 +8,8 @@
 
 ## v1.14.0(main)
 
+- docs: |部署| 记录 Clifzo Mail 通过 Cloudflare Workers Builds 从 GitHub `master` 自动发布的配置。
+
 - fix: |设置| 统一设置总览与子页导航，收件箱保留一个常用入口，无收件人邮件和邮件 Webhook 使用独立页面。
 - fix: |设置| 梳理服务密钥、外观、Telegram 和运维页面的布局与操作，明确显示 Webhook 是否已配置接收地址。
 

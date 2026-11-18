@@ -8,6 +8,8 @@
 
 ## v1.14.0(main)
 
+- docs: |Deployment| Document how Cloudflare Workers Builds deploys Clifzo Mail from GitHub `master`.
+
 - fix: |Settings| Unify navigation across settings, keep a single Inbox entry and give unassigned mail and the mail webhook dedicated pages.
 - fix: |Settings| Streamline provider keys, appearance, Telegram, and maintenance controls, and show whether the mail webhook has a destination.
 

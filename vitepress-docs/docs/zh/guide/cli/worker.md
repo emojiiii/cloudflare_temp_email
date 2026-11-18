@@ -3,7 +3,24 @@
 > [!warning] 注意
 > `worker.dev` 域名在中国无法访问，请自定义域名
 
+## Clifzo Mail 自动部署
+
+Clifzo Mail 的生产 Worker `kitt-temp-email` 由 Cloudflare Workers Builds 部署。推送 GitHub 仓库 `emojiiii/cloudflare_temp_email` 的 `master` 会构建前端并发布到 `mail.kitt.tools`。默认分支 `main` 用于同步上游。
+
+| 构建设置 | 值 |
+| --- | --- |
+| 生产分支 | `master` |
+| 根目录 | `worker` |
+| 构建命令 | `pnpm run build:assets` |
+| 部署命令 | `pnpm run deploy` |
+| Node.js | `24` |
+| pnpm | `10.10.0` |
+
+生产域名和资源绑定定义在 `worker/wrangler.toml`，运行时密钥保存在 Cloudflare。涉及 D1 架构的版本应在发布前对生产库执行相应迁移。构建进度可在 Worker 的「部署」页查看。
+
 ## 初始化项目
+
+创建独立 Worker 实例时使用下面的初始化命令。
 
 ```bash
 cd worker
