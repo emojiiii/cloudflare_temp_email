@@ -211,6 +211,8 @@ const copy = async () => {
     }
 }
 
+defineExpose({ copy })
+
 onMounted(async () => {
     await refreshAddressOptions();
 });

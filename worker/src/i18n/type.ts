@@ -11,6 +11,7 @@ export type LocaleMessages = {
     UserAcceesTokenExpiredMsg: string
     UserRoleIsNotAdminMsg: string
     NeedAdminPasswordMsg: string
+    InvalidAdminCredentialsMsg: string
     AdminApiIpNotAllowedMsg: string
 
     KVNotAvailableMsg: string
@@ -62,6 +63,13 @@ export type LocaleMessages = {
     OperationFailedMsg: string
     RequiredFieldMsg: string
     InvalidInputMsg: string
+    MailTranslationNotEnabledMsg: string
+    MailTranslationProviderChangedMsg: string
+    MailTranslationQuotaMsg: string
+    MailTranslationFailedMsg: string
+    MailReplyNotEnabledMsg: string
+    MailReplyQuotaMsg: string
+    MailReplyFailedMsg: string
 
     // Address related
     NameTooShortMsg: string
@@ -90,6 +98,7 @@ export type LocaleMessages = {
     InvalidAddressIdMsg: string
     EnableKVMsg: string
     EnableSendMailMsg: string
+    ReceiveOnlyMsg: string
     EnableSendMailForDomainMsg: string
     InvalidCleanupConfigMsg: string
     InvalidCleanTypeMsg: string

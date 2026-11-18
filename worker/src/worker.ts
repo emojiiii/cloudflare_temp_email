@@ -18,6 +18,9 @@ import { email } from './email';
 import { scheduled } from './scheduled';
 import { getPasswords, getBooleanValue, getDomains, checkIsAdmin, getEnvStringList } from './utils';
 import { checkAccessControl } from './ip_blacklist';
+import { translateMail } from './mails_api/translation';
+import { draftMailReply } from './mails_api/ai_reply';
+import { canUseReceiveOnlyEndpoint } from './receive_only';
 
 const API_PATHS = [
 	"/api/",
@@ -34,6 +37,9 @@ const app = new Hono<HonoCustomType>()
 app.use('/*', cors());
 // error handler
 app.onError((err, c) => {
+	if (err instanceof SyntaxError && /^\/(admin|user_api)\/provider_credentials(?:\/|$)/.test(c.req.path)) {
+		return c.text(i18n.getMessagesbyContext(c).InvalidInputMsg, 400);
+	}
 	console.error(err)
 	return c.json({ code: ErrorCode.INTERNAL_SERVER_ERROR, message: `${err.name} ${err.message}` }, 500)
 })
@@ -69,6 +75,9 @@ app.use('/*', async (c, next) => {
 			return c.json({ code: ErrorCode.AUTH_SITE_PASSWORD_INVALID, message: msgs.CustomAuthPasswordMsg }, 401)
 		}
 	}
+	if (getBooleanValue(c.env.RECEIVE_ONLY_USERS) && !canUseReceiveOnlyEndpoint(c.req.method, c.req.path)) {
+		return c.text(msgs.ReceiveOnlyMsg, 403);
+	}
 
 	// rate limit for specific endpoints
 	if (
@@ -79,6 +88,7 @@ app.use('/*', async (c, next) => {
 		|| c.req.path.startsWith("/user_api/register")
 		|| c.req.path.startsWith("/user_api/verify_code")
 		|| c.req.path.startsWith("/redeem_api/")
+		|| ["/api/translate", "/user_api/translate", "/admin/translate", "/api/ai_reply", "/user_api/ai_reply", "/admin/ai_reply"].includes(c.req.path)
 	) {
 		const reqIp = c.req.raw.headers.get("cf-connecting-ip")
 		if (reqIp && c.env.RATE_LIMITER) {
@@ -256,6 +266,7 @@ app.use('/admin/*', async (c, next) => {
 
 	// check header x-admin-auth
 	if (checkIsAdmin(c)) {
+		c.set("adminSenderOwner", "admin");
 		await next();
 		return;
 	}
@@ -273,6 +284,10 @@ app.use('/admin/*', async (c, next) => {
 			}
 			if (payload.user_role !== c.env.ADMIN_USER_ROLE) {
 				return c.json({ code: ErrorCode.AUTH_ADMIN_CREDENTIAL_INVALID, message: msgs.UserRoleIsNotAdminMsg }, 401)
+			}
+			if (typeof payload.user_id === "number" && Number.isSafeInteger(payload.user_id) && payload.user_id > 0
+				&& typeof payload.user_email === "string" && payload.user_email) {
+				c.set("adminSenderOwner", `user:${payload.user_id}:${payload.user_email}`);
 			}
 			await next();
 			return;
@@ -299,6 +314,13 @@ app.route('/', adminApi)
 app.route('/', apiSendMail)
 app.route('/', telegramApi)
 app.route('/', redeemApi)
+
+app.post('/api/translate', translateMail)
+app.post('/user_api/translate', translateMail)
+app.post('/admin/translate', translateMail)
+app.post('/api/ai_reply', draftMailReply)
+app.post('/user_api/ai_reply', draftMailReply)
+app.post('/admin/ai_reply', draftMailReply)
 
 const health_check = async (c: Context<HonoCustomType>) => {
 	const lang = c.req.raw.headers.get("x-lang") || c.env.DEFAULT_LANG;

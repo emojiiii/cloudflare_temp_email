@@ -11,6 +11,57 @@ import {
 const headers = (jwt: string) => ({ Authorization: `Bearer ${jwt}` });
 
 test.describe('Mail read status', () => {
+  test('searches the mailbox before pagination and intersects with unread', async ({ request }) => {
+    const mailbox = await createTestAddress(request, 'mail-search');
+    const other = await createTestAddress(request, 'mail-search-other');
+    const mailboxHeaders = headers(mailbox.jwt);
+    const adminHeaders = { 'x-admin-auth': 'e2e-admin-pass' };
+    const list = async (query: Record<string, string> = {}) => {
+      const response = await request.get(`${WORKER_URL}/api/mails`, {
+        headers: mailboxHeaders,
+        params: { limit: '1', offset: '0', ...query },
+      });
+      expect(response.ok()).toBe(true);
+      return response.json();
+    };
+
+    try {
+      await seedTestMail(request, mailbox.address, {
+        from: 'history-sender@example.net',
+        subject: '=?UTF-8?Q?Archive_=E9=82=AE=E4=BB=B6_=25=5F?=',
+      });
+      await seedTestMail(request, mailbox.address, { subject: 'More recent', text: 'Body marker only' });
+      await seedTestMail(request, other.address, { subject: 'Archive 邮件' });
+
+      const firstPage = await list();
+      expect(firstPage.count).toBe(2);
+      expect(firstPage.results[0].raw).toContain('More recent');
+      const subject = await list({ q: 'ARCHIVE 邮件', unread: '1' });
+      expect(subject.count).toBe(1);
+      const [message] = subject.results;
+      expect(message.source).toBe('history-sender@example.net');
+      expect(message).not.toHaveProperty('search_subject');
+
+      expect((await list({ q: '%_' })).results[0].id).toBe(message.id);
+      expect((await list({ q: 'HISTORY-SENDER' })).results[0].id).toBe(message.id);
+      expect((await list({ q: 'Body marker only' })).count).toBe(0);
+
+      const adminSearch = await request.get(`${WORKER_URL}/admin/mails`, {
+        headers: adminHeaders,
+        params: { limit: '10', offset: '0', address: mailbox.address, q: 'ARCHIVE 邮件' },
+      });
+      expect((await adminSearch.json()).results.map((mail: { id: number }) => mail.id)).toEqual([message.id]);
+      const markRead = await request.patch(`${WORKER_URL}/admin/mails/${message.id}/read`, {
+        headers: adminHeaders, data: { isUnread: false },
+      });
+      expect((await markRead.json()).success).toBe(true);
+      expect((await list({ q: 'ARCHIVE 邮件', unread: '1' })).count).toBe(0);
+    } finally {
+      await deleteAddress(request, mailbox.jwt);
+      await deleteAddress(request, other.jwt);
+    }
+  });
+
   test('keeps historical mail read and switches one new mail state', async ({ request }) => {
     const mailbox = await createTestAddress(request, 'mail-read');
     try {

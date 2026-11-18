@@ -3,26 +3,17 @@ import { FRONTEND_URL, createTestAddress, deleteAddress } from '../../fixtures/t
 import { request as apiRequest } from '@playwright/test';
 
 test.describe('Webhook Presets', () => {
-  test('selecting each preset fills valid settings', async ({ page, context }) => {
+  test('selecting each preset fills valid settings', async ({ page }) => {
     test.setTimeout(60_000);
 
     const api = await apiRequest.newContext();
     let jwt: string | undefined;
 
-    // Block popups (presets open doc URLs in new tabs)
-    context.on('page', (p) => p.close());
-
     try {
       const created = await createTestAddress(api, 'webhook-preset');
       jwt = created.jwt;
 
-      // Login via JWT
-      await page.goto(`${FRONTEND_URL}/en/?jwt=${jwt}`);
-
-      // Click "Webhook Settings" in the sidebar menu
-      const webhookMenu = page.getByText('Webhook Settings');
-      await expect(webhookMenu).toBeVisible({ timeout: 10_000 });
-      await webhookMenu.click();
+      await page.goto(`${FRONTEND_URL}/en/settings/webhook?jwt=${jwt}`);
 
       // Verify presets button is visible
       const presetsBtn = page.getByRole('button', { name: 'Presets' });

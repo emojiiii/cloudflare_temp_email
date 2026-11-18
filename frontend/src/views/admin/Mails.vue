@@ -1,47 +1,47 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
-import { useScopedI18n } from '@/i18n/app'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
-import { useGlobalState } from '../../store'
 import { api } from '../../api'
-import MailBox from '../../components/MailBox.vue';
+import { useGlobalState } from '../../store'
+import MailBox from '../../components/MailBox.vue'
+import MailboxTabs from '../../components/MailboxTabs.vue'
 
-const { adminMailTabAddress } = useGlobalState()
+const props = defineProps({
+    onCompose: { type: Function, required: true },
+})
 
-const { t } = useScopedI18n('views.admin.Mails')
+const route = useRoute()
+const router = useRouter()
+const { openSettings } = useGlobalState()
+const address = computed(() => typeof route.query.address === 'string' ? route.query.address : '')
 
-const mailBoxKey = ref("")
-
-const queryMail = () => {
-    adminMailTabAddress.value = adminMailTabAddress.value.trim();
-    mailBoxKey.value = Date.now();
+const selectMailbox = mailbox => {
+    if (mailbox !== address.value) return router.push({ query: { ...route.query, address: mailbox || undefined } })
 }
 
-const fetchMailData = async (limit, offset) => {
-    return await api.fetch(
-        `/admin/mails`
-        + `?limit=${limit}`
-        + `&offset=${offset}`
-        + (adminMailTabAddress.value ? `&address=${adminMailTabAddress.value}` : '')
-    );
+const fetchMailboxes = ({ limit, offset, query, signal }) => {
+    const params = new URLSearchParams({ limit, offset, sort_by: 'name', sort_order: 'ascend' })
+    if (query) params.set('query', query)
+    return api.fetch(`/admin/address?${params}`, { signal, showLoading: false })
 }
 
-const deleteMail = async (curMailId) => {
-    await api.fetch(`/admin/mails/${curMailId}`, { method: 'DELETE' });
-};
+const fetchMailData = (params, options) => {
+    if (address.value) params.set('address', address.value)
+    return api.fetch(`/admin/mails?${params}`, options)
+}
+
+const deleteMail = (id) => api.fetch(`/admin/mails/${id}`, { method: 'DELETE' })
+const updateMailReadStatus = (id, isUnread) => api.fetch(`/admin/mails/${id}/read`, {
+    method: 'PATCH', body: JSON.stringify({ isUnread }), showLoading: false,
+})
 </script>
 
 <template>
-    <div style="margin-top: 10px;">
-        <n-input-group>
-            <n-input v-model:value="adminMailTabAddress" :placeholder="t('addressQueryTip')"
-                @keydown.enter="queryMail" clearable />
-            <n-button @click="queryMail" type="primary" tertiary>
-                {{ t('query') }}
-            </n-button>
-        </n-input-group>
-        <div style="margin-top: 10px;"></div>
-        <MailBox :key="mailBoxKey" :enableUserDeleteEmail="true" :fetchMailData="fetchMailData"
-            :deleteMail="deleteMail" :showFilterInput="true" />
-    </div>
+    <MailboxTabs :model-value="address" :fetch-mailboxes="fetchMailboxes" allow-exact
+        @update:model-value="selectMailbox" />
+    <MailBox :key="address" translation-scope="admin" :enable-user-delete-email="true" :fetch-mail-data="fetchMailData"
+        :delete-mail="deleteMail" :show-e-mail-to="!address" show-filter-input :show-reply="true"
+        :enable-mail-read-status="openSettings.enableMailReadStatus" :update-mail-read-status="updateMailReadStatus"
+        :on-compose="props.onCompose" />
 </template>

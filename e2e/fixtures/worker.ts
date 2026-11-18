@@ -3,9 +3,43 @@ import worker from '../../worker/src/worker';
 import { CONSTANTS } from '../../worker/src/constants';
 import mailApi from './mail-api';
 
+const translationTestKey = 'sk-translation-cache-fixture';
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  if (input !== 'https://api.deepseek.com/chat/completions'
+    || new Headers(init?.headers).get('Authorization') !== `Bearer ${translationTestKey}`) {
+    return originalFetch(input, init);
+  }
+  const { messages, response_format: format } = JSON.parse(String(init?.body));
+  const source = messages[1].content;
+  // Each upstream call has a distinct result so a repeated response proves a cache hit.
+  const stamp = crypto.randomUUID();
+  const translated = (text: string) => `${stamp} ${text}`;
+  let content = translated(source);
+  if (format) {
+    const { incoming, intent, segments, focus, fixed } = JSON.parse(source);
+    if (incoming) {
+      const body = intent ? `Notes: ${intent}` : `Received: ${incoming.subject}`;
+      content = JSON.stringify({ text: body, chineseText: `预览：${body}` });
+    } else {
+      const output = focus
+        ? focus.map(({ text }: { text: string }) => translated(text))
+        : segments.map((text: string, index: number) =>
+          fixed?.some((entry: { index: number }) => entry.index === index) ? null : translated(text));
+      content = JSON.stringify({ segments: output });
+    }
+  }
+  return Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] });
+};
+
 const testApi = new Hono<HonoCustomType>();
 testApi.post('/seed_mail', c => mailApi.seedMail(c.req.raw, c.env));
 testApi.post('/receive_mail', c => mailApi.receiveMail(c.req.raw, c.env, c.executionCtx as ExecutionContext));
+testApi.get('/mail_translation_count/:id', async c => {
+  const count = await c.env.DB.prepare('SELECT COUNT(*) AS count FROM mail_translations WHERE mail_id = ?')
+    .bind(c.req.param('id')).first<number>('count');
+  return c.json({ count });
+});
 testApi.post('/expire_redeem_code', async c => {
   const { code } = await c.req.json<{ code: string }>();
   const { meta } = await c.env.DB.prepare("UPDATE redeem_codes SET expires_at = '2020-01-01T00:00:00.000Z' WHERE code = ?")
@@ -30,11 +64,16 @@ const app = new Hono<HonoCustomType>();
 app.route('/__test', testApi);
 app.all('*', async c => {
   const passwordMode = c.req.header('x-test-address-password-mode');
-  const env = passwordMode ? {
+  const receiveOnly = c.req.header('x-test-receive-only') === 'true';
+  const env = {
     ...c.env,
-    ADDRESS_PASSWORD_LOGIN_ONLY: true,
-    ENABLE_ADDRESS_PASSWORD: passwordMode === 'password-only',
-  } : c.env;
+    ...(passwordMode ? {
+      ADDRESS_PASSWORD_LOGIN_ONLY: true,
+      ENABLE_ADDRESS_PASSWORD: passwordMode === 'password-only',
+    } : {}),
+    ...(receiveOnly ? { RECEIVE_ONLY_USERS: true, DEEPSEEK_API_KEY: 'sk-test-admin-fallback' } : {}),
+    ...(c.req.header('x-test-deepseek-translation') === 'true' ? { DEEPSEEK_API_KEY: translationTestKey } : {}),
+  };
   const batchFailure = c.req.header('x-test-fail-db-batch');
   const kvFailure = c.req.header('x-test-fail-kv');
   const DB = batchFailure ? {

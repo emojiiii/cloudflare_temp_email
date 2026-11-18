@@ -5,7 +5,7 @@
 Mailbox APIs accept legacy mailbox credentials and password sessions containing `type: "address_password_login"`, `address`, `address_id`, `iat`, and `exp`. The backend verifies signatures and mailbox identity, and requires password sessions to be unexpired, issued no later than the current time, and valid for no more than 30 days.
 
 - Mailbox APIs retain `Authorization: Bearer <jwt>` without a database migration.
-- `GET /api/settings` returns only `address`, `send_balance`, and `new_address_token`. A valid password-session JWT with less than seven days remaining receives a new 30-day token; otherwise the field is `null`. Legacy credentials do not renew, and expired sessions must log in again.
+- `GET /api/settings` returns `address`, `send_balance`, `send_unlimited`, and `new_address_token`. When `send_unlimited` is `true`, sending does not consume a per-mailbox balance. A valid password-session JWT with less than seven days remaining receives a new 30-day token; otherwise the field is `null`. Legacy credentials do not renew, and expired sessions must log in again.
 - Clients must replace their current token only when `new_address_token` is non-null; when it is `null`, keep using the current token.
 
 The web client updates only the active JWT from one successful settings response. The local cache retains token strings and its existing append and bind behavior, without replacing or deduplicating historical tokens. Switching to an expired cached session requires logging in again. JWT decoding is only for mailbox, login-method, and token-expiry display; authorization remains on the backend.
@@ -63,13 +63,67 @@ print(response.json())
 
 **Note**: `/admin/mails` follows the same design as `/api/mails`: it returns stored raw MIME data. If you need readable subject/body, parse the raw content on the client side.
 
-**Note**: Keyword filtering has been removed from the backend API. If you need to filter emails by content, please use the frontend filter input in the UI, which filters the currently displayed page.
+## Filter by sender, subject, and unread status
+
+`GET /api/mails`, `GET /admin/mails`, and `GET /user_api/mails` accept these optional parameters. Filters apply before pagination, and `count` is the total number of matches.
+
+- `q` matches part of the sender name, sender address, or subject, ignoring case.
+- When mail read status is enabled, `unread=1` limits results to unread mail and can be combined with `q`.
+- Use `address` to select a mailbox in the admin or user API. Omit it to search all mailboxes accessible to the account.
+
+To upgrade an existing D1 database, apply `db/2026-11-18-mail-search.sql` and run `worker/scripts/backfill-mail-search.mjs` to index existing mail.
 
 ## Mail Read Status API
 
 Enable `ENABLE_MAIL_READ_STATUS` and upgrade the database first. Historical mail has `is_unread = NULL` and is treated as read; new mail has `is_unread = 1`. Opening unread mail from the web mail list marks it as read, and its detail view can switch the state manually. Refreshing the page does not mark it as read:
 
-- `PATCH /api/mails/:id/read`: set one mail belonging to the current address; use `{ "isUnread": true }` for unread or `{ "isUnread": false }` for read
+- `PATCH /api/mails/:id/read` sets the status in the current mailbox. Use `PATCH /user_api/mails/:id/read` for linked mailboxes or `PATCH /admin/mails/:id/read` as an administrator.
+- All three endpoints accept `{ "isUnread": true }` for unread or `{ "isUnread": false }` for read.
+
+## Mail translation API
+
+The `translation` field of `GET /open_api/settings` is `null` when translation is disabled. When enabled, it lists `provider`, `maxLength`, supported target language codes in `languages`, and the `cacheOnly` capability.
+
+Use `POST /api/translate` for a mailbox, `POST /user_api/translate` for a linked mailbox in the user center, or `POST /admin/translate` in the admin console. Each route uses the corresponding existing authentication.
+
+When translating a saved incoming message, pass its D1 ID as `mailId` to reuse translations. When batching rich text, provide a zero-based `part` number per target language (defaults to 0, maximum 29). The Worker checks access to the message and reuses the D1 translation when the target language and input match. The `X-Mail-Translation-Cache` response header indicates a hit or a newly generated translation. Deleting the message removes its translations. Omit `mailId` for draft translation. Upgrade existing databases to v0.0.16 first.
+
+For a cache lookup, send `mailId` and `cacheOnly: true`. Hits include the actual `targetLanguage`, and misses return HTTP 204. Cache lookups do not call DeepSeek. On part 0, set `fallbackToCachedLanguage: true` to prefer the specified language and fall back to another cached language. Use the returned language for later parts.
+
+In receive-only mode, ordinary users translate incoming messages in linked mailboxes with `POST /user_api/translate`. With a user session, call `GET /user_api/provider_credentials` to check `deepseekConfigured`, `PUT /user_api/provider_credentials/deepseek` with `{"apiKey":"..."}` to save a personal key, or `DELETE` to remove it. The responses expose only configuration status.
+
+```json
+{
+  "text": "Could we move the meeting to Friday?",
+  "targetLanguage": "zh",
+  "provider": "deepseek"
+}
+```
+
+On success the API returns `{ "text": "我们可以把会议改到星期五吗？" }`.
+
+For rich-text translation, provide a `segments` array in place of `text`. Send 1 to 200 plain-text segments per request, with a combined length of at most `maxLength` characters. The response returns translated `segments` in request order so the client can restore the formatting.
+
+Rich-text requests can include a `layout` array with one entry per segment, such as `{ "block": 0, "anchored": true }`. Segments in the same paragraph share a `block`, a zero-based integer smaller than the segment count. Use the boolean `anchored` to keep emphasized text or a link label in its original position. The Worker first translates anchored text in context and fixes that wording in place, then arranges plain text within each paragraph for natural word order. The response format stays the same.
+
+Requests with both anchored and plain segments make two DeepSeek calls.
+
+## AI reply drafting API
+
+With the administrator's DeepSeek key configured, `GET /open_api/settings` exposes `aiReply` with `languages`, `maxSubjectLength`, `maxBodyLength`, and `maxIntentLength`. Otherwise `aiReply` is `null`.
+
+Use `POST /api/ai_reply` for a mailbox, `POST /user_api/ai_reply` in the user center, or `POST /admin/ai_reply` in the admin console. Each endpoint uses its existing authentication.
+
+```json
+{
+  "subject": "Meeting on Friday",
+  "body": "Could we move our meeting to Friday afternoon?",
+  "intent": "礼貌回复周五下午可以，请对方确认具体时间。",
+  "targetLanguage": "auto"
+}
+```
+
+Set `targetLanguage` to `auto` to reply in the incoming message's language, or choose a code from `languages`. Omit `intent` or leave it blank to draft from the incoming subject and body alone. The endpoint returns `{ "text": "…", "chineseText": "…" }` for the outgoing draft and its Simplified Chinese preview. The user can insert `text`, edit and confirm it, then send from the original receiving address within the same thread.
 
 ## Admin Get Mail API
 

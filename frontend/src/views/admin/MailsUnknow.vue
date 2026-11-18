@@ -1,22 +1,16 @@
 <script setup>
 import { api } from '../../api'
-import MailBox from '../../components/MailBox.vue';
+import MailBox from '../../components/MailBox.vue'
 
-const fetchMailUnknowData = async (limit, offset) => {
-    return await api.fetch(
-        `/admin/mails_unknow`
-        + `?limit=${limit}`
-        + `&offset=${offset}`
-    );
-}
+const props = defineProps({
+    onCompose: { type: Function, required: true },
+})
 
-const deleteMail = async (curMailId) => {
-    await api.fetch(`/admin/mails/${curMailId}`, { method: 'DELETE' });
-};
+const fetchMailData = (params, options) => api.fetch(`/admin/mails_unknow?${params}`, options)
+const deleteMail = (id) => api.fetch(`/admin/mails/${id}`, { method: 'DELETE' })
 </script>
 
 <template>
-    <div style="margin-top: 10px;">
-        <MailBox :enableUserDeleteEmail="true" :fetchMailData="fetchMailUnknowData" :deleteMail="deleteMail" />
-    </div>
+    <MailBox translation-scope="admin" :enable-user-delete-email="true" :fetch-mail-data="fetchMailData" :delete-mail="deleteMail"
+        :show-reply="true" :on-compose="props.onCompose" />
 </template>

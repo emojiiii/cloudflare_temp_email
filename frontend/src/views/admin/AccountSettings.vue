@@ -391,124 +391,135 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="center">
-        <n-card :bordered="false" embedded style="max-width: 600px;">
-            <n-alert :show-icon="false" :bordered="false" type="warning" style="margin-bottom: 10px;">
-                <span>{{ t("tip") }}</span>
-            </n-alert>
-            <n-flex justify="end">
-                <n-button @click="save" type="primary" :loading="loading">
-                    {{ t('save') }}
-                </n-button>
-            </n-flex>
-            <n-form-item-row :label="t('address_block_list')">
-                <n-select v-model:value="addressBlockList" filterable multiple tag
-                    :placeholder="t('address_block_list_placeholder')">
-                    <template #empty>
-                        <n-text depth="3">
-                            {{ t('manualInputPrompt') }}
-                        </n-text>
-                    </template>
-                </n-select>
-            </n-form-item-row>
-            <n-form-item-row :label="t('send_address_block_list')">
-                <n-select v-model:value="sendAddressBlockList" filterable multiple tag
-                    :placeholder="t('address_block_list_placeholder')">
-                    <template #empty>
-                        <n-text depth="3">
-                            {{ t('manualInputPrompt') }}
-                        </n-text>
-                    </template>
-                </n-select>
-            </n-form-item-row>
-            <n-form-item-row :label="t('noLimitSendAddressList')">
-                <n-select v-model:value="noLimitSendAddressList" filterable multiple tag
-                    :placeholder="t('noLimitSendAddressList')">
-                    <template #empty>
-                        <n-text depth="3">
-                            {{ t('manualInputPrompt') }}
-                        </n-text>
-                    </template>
-                </n-select>
-            </n-form-item-row>
-            <n-form-item-row :label="t('verified_address_list')">
-                <n-select v-model:value="verifiedAddressList" filterable multiple tag
-                    :placeholder="t('verified_address_list')">
-                    <template #empty>
-                        <n-text depth="3">
-                            {{ t('manualInputPrompt') }}
-                        </n-text>
-                    </template>
-                </n-select>
-            </n-form-item-row>
-            <n-form-item-row :label="t('send_mail_limit')">
-                <n-flex vertical style="width: 100%;">
-                    <n-flex justify="space-between" align="center">
-                        <n-text>{{ t('send_mail_daily_limit') }}</n-text>
-                        <n-flex align="center">
-                            <n-switch v-model:value="sendMailDailyLimitEnabled" :round="false" />
-                            <n-input-number
-                                v-model:value="sendMailDailyLimit"
-                                :disabled="!sendMailDailyLimitEnabled"
-                                :min="-1"
-                            />
+    <div class="mail-rules">
+        <div class="mail-rules-toolbar">
+            <n-text depth="3">{{ t('tip') }}</n-text>
+            <n-button @click="save" type="primary" :loading="loading">{{ t('save') }}</n-button>
+        </div>
+        <div class="mail-rules-groups">
+            <section class="mail-rule-section" aria-labelledby="mail-rules-outbound">
+                <h2 id="mail-rules-outbound">{{ t('outboundSettings') }}</h2>
+                <div class="mail-rule-controls">
+                    <n-form-item-row :label="t('noLimitSendAddressList')">
+                        <n-select v-model:value="noLimitSendAddressList" filterable multiple tag
+                            :placeholder="t('noLimitSendAddressList')">
+                            <template #empty>
+                                <n-text depth="3">
+                                    {{ t('manualInputPrompt') }}
+                                </n-text>
+                            </template>
+                        </n-select>
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('send_mail_limit')">
+                        <n-flex vertical style="width: 100%;">
+                            <n-flex justify="space-between" align="center">
+                                <n-text>{{ t('send_mail_daily_limit') }}</n-text>
+                                <n-flex align="center">
+                                    <n-switch v-model:value="sendMailDailyLimitEnabled" :round="false" />
+                                    <n-input-number
+                                        v-model:value="sendMailDailyLimit"
+                                        :disabled="!sendMailDailyLimitEnabled"
+                                        :min="-1"
+                                    />
+                                </n-flex>
+                            </n-flex>
+                            <n-flex justify="space-between" align="center">
+                                <n-text>{{ t('send_mail_monthly_limit') }}</n-text>
+                                <n-flex align="center">
+                                    <n-switch v-model:value="sendMailMonthlyLimitEnabled" :round="false" />
+                                    <n-input-number
+                                        v-model:value="sendMailMonthlyLimit"
+                                        :disabled="!sendMailMonthlyLimitEnabled"
+                                        :min="-1"
+                                    />
+                                </n-flex>
+                            </n-flex>
+                            <n-text depth="3">
+                                {{ t('send_mail_limit_tip') }}
+                            </n-text>
                         </n-flex>
-                    </n-flex>
-                    <n-flex justify="space-between" align="center">
-                        <n-text>{{ t('send_mail_monthly_limit') }}</n-text>
-                        <n-flex align="center">
-                            <n-switch v-model:value="sendMailMonthlyLimitEnabled" :round="false" />
-                            <n-input-number
-                                v-model:value="sendMailMonthlyLimit"
-                                :disabled="!sendMailMonthlyLimitEnabled"
-                                :min="-1"
-                            />
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('send_address_block_list')">
+                        <n-select v-model:value="sendAddressBlockList" filterable multiple tag
+                            :placeholder="t('address_block_list_placeholder')">
+                            <template #empty>
+                                <n-text depth="3">
+                                    {{ t('manualInputPrompt') }}
+                                </n-text>
+                            </template>
+                        </n-select>
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('verified_address_list')">
+                        <n-select v-model:value="verifiedAddressList" filterable multiple tag
+                            :placeholder="t('verified_address_list')">
+                            <template #empty>
+                                <n-text depth="3">
+                                    {{ t('manualInputPrompt') }}
+                                </n-text>
+                            </template>
+                        </n-select>
+                    </n-form-item-row>
+                </div>
+            </section>
+            <section class="mail-rule-section" aria-labelledby="mail-rules-inbound">
+                <h2 id="mail-rules-inbound">{{ t('inboundSettings') }}</h2>
+                <div class="mail-rule-controls">
+                    <n-form-item-row :label="t('block_receive_unknow_address_email')">
+                        <n-switch v-model:value="emailRuleSettings.blockReceiveUnknowAddressEmail" :round="false" />
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('fromBlockList')">
+                        <n-select v-model:value="fromBlockList" filterable multiple tag :placeholder="t('fromBlockList')">
+                            <template #empty>
+                                <n-text depth="3">
+                                    {{ t('manualInputPrompt') }}
+                                </n-text>
+                            </template>
+                        </n-select>
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('address_block_list')">
+                        <n-select v-model:value="addressBlockList" filterable multiple tag
+                            :placeholder="t('address_block_list_placeholder')">
+                            <template #empty>
+                                <n-text depth="3">
+                                    {{ t('manualInputPrompt') }}
+                                </n-text>
+                            </template>
+                        </n-select>
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('email_forwarding_config')">
+                        <n-button @click="openEmailForwardingModal">{{ t('config') }}</n-button>
+                    </n-form-item-row>
+                </div>
+            </section>
+            <section class="mail-rule-section" aria-labelledby="mail-rules-address">
+                <h2 id="mail-rules-address">{{ t('addressRules') }}</h2>
+                <div class="mail-rule-controls">
+                    <n-form-item-row :label="t('create_address_subdomain_match')">
+                        <n-flex vertical style="width: 100%;">
+                            <n-radio-group v-model:value="addressCreationSubdomainMatchMode">
+                                <n-space vertical size="small">
+                                    <n-radio v-for="item in subdomainMatchModeOptions" :key="item.value" :value="item.value">
+                                        {{ item.label }}
+                                    </n-radio>
+                                </n-space>
+                            </n-radio-group>
+                            <n-text depth="3">
+                                {{ t('create_address_subdomain_match_tip') }}
+                            </n-text>
+                            <n-text depth="3">
+                                {{ t('create_address_subdomain_match_note') }}
+                            </n-text>
+                            <n-text depth="3">
+                                {{ t('create_address_subdomain_match_follow_env_note') }}
+                            </n-text>
+                            <n-alert v-if="subdomainMatchEnvLocked" type="warning" :show-icon="false" :bordered="false">
+                                {{ t('create_address_subdomain_match_env_locked') }}
+                            </n-alert>
                         </n-flex>
-                    </n-flex>
-                    <n-text depth="3">
-                        {{ t('send_mail_limit_tip') }}
-                    </n-text>
-                </n-flex>
-            </n-form-item-row>
-            <n-form-item-row :label="t('fromBlockList')">
-                <n-select v-model:value="fromBlockList" filterable multiple tag :placeholder="t('fromBlockList')">
-                    <template #empty>
-                        <n-text depth="3">
-                            {{ t('manualInputPrompt') }}
-                        </n-text>
-                    </template>
-                </n-select>
-            </n-form-item-row>
-            <n-form-item-row :label="t('block_receive_unknow_address_email')">
-                <n-switch v-model:value="emailRuleSettings.blockReceiveUnknowAddressEmail" :round="false" />
-            </n-form-item-row>
-            <n-form-item-row :label="t('create_address_subdomain_match')">
-                <n-flex vertical style="width: 100%;">
-                    <n-radio-group v-model:value="addressCreationSubdomainMatchMode">
-                        <n-space vertical size="small">
-                            <n-radio v-for="item in subdomainMatchModeOptions" :key="item.value" :value="item.value">
-                                {{ item.label }}
-                            </n-radio>
-                        </n-space>
-                    </n-radio-group>
-                    <n-text depth="3">
-                        {{ t('create_address_subdomain_match_tip') }}
-                    </n-text>
-                    <n-text depth="3">
-                        {{ t('create_address_subdomain_match_note') }}
-                    </n-text>
-                    <n-text depth="3">
-                        {{ t('create_address_subdomain_match_follow_env_note') }}
-                    </n-text>
-                    <n-alert v-if="subdomainMatchEnvLocked" type="warning" :show-icon="false" :bordered="false">
-                        {{ t('create_address_subdomain_match_env_locked') }}
-                    </n-alert>
-                </n-flex>
-            </n-form-item-row>
-            <n-form-item-row :label="t('email_forwarding_config')">
-                <n-button @click="openEmailForwardingModal">{{ t('config') }}</n-button>
-            </n-form-item-row>
-        </n-card>
+                    </n-form-item-row>
+                </div>
+            </section>
+        </div>
     </div>
 
     <!-- 邮件转发配置弹窗 -->
@@ -532,11 +543,46 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.center {
+.mail-rules {
+    width: min(100%, 62rem);
+}
+
+.mail-rules-toolbar {
     display: flex;
-    text-align: left;
-    place-items: center;
-    justify-content: center;
-    margin: 20px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 0 0 14px;
+}
+
+.mail-rules-toolbar .n-text {
+    font-size: 13px;
+}
+
+.mail-rule-section {
+    display: grid;
+    grid-template-columns: minmax(100px, 12rem) minmax(0, 1fr);
+    gap: 18px;
+    padding: 20px 0 12px;
+    border-block-start: 1px solid var(--mail-border);
+}
+
+.mail-rule-section h2 {
+    margin: 3px 0 0;
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.mail-rule-controls {
+    min-width: 0;
+}
+
+@media (max-width: 700px) {
+    .mail-rule-section {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        padding: 16px 0 8px;
+    }
 }
 </style>

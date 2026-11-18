@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, h } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useMessage } from 'naive-ui'
 import { useScopedI18n } from '@/i18n/app'
+import { useGlobalState } from '@/store'
 import type { DropdownOption } from 'naive-ui'
 import FilterEditor from './FilterEditor.vue'
 import type { FilterExpression, FilterOperator } from '@/utils/filter'
 
 const props = defineProps({
+    admin: Boolean,
     fetchData: {
         type: Function,
         default: () => { },
@@ -27,10 +30,10 @@ const props = defineProps({
     },
 })
 
-// @ts-ignore
 const message = useMessage()
 
 const { t } = useScopedI18n('components.WebhookComponent')
+const { openSettings } = useGlobalState()
 
 class WebhookSettings {
     filter?: FilterExpression | null
@@ -164,12 +167,20 @@ const handlePresetSelect = (key: number) => {
         return
     }
     Object.assign(webhookSettings.value, preset.settings)
+    presetDocs.value = preset.doc
     message.success(t('fillInDemoTip'))
-    window.open(preset.doc, '_blank', 'noopener,noreferrer')
 }
 
 const webhookSettings = ref<WebhookSettings>(new WebhookSettings())
-const enableWebhook = ref(false)
+const state = ref<'loading' | 'ready' | 'error'>('loading')
+const loadError = ref('')
+const available = computed(() => !openSettings.value.fetched || openSettings.value.enableWebhook)
+const saving = ref(false)
+const presetDocs = ref('')
+const savedDelivery = ref<'missingDestination' | 'paused' | 'active'>('missingDestination')
+const updateDeliveryStatus = ({ url, enabled }: Pick<WebhookSettings, 'url' | 'enabled'>) => {
+    savedDelivery.value = url.trim() ? (enabled ? 'active' : 'paused') : 'missingDestination'
+}
 const showTestModal = ref(false)
 const testMode = ref('random')
 const testMailId = ref<number | null>(null)
@@ -194,32 +205,41 @@ const operators = computed<FilterOperator[]>(() => [
 ])
 
 const fetchData = async () => {
+    state.value = 'loading'
     try {
         const res = await props.fetchData()
         Object.assign(webhookSettings.value, res)
         savedFilter.value = res.filter ?? null
-        enableWebhook.value = true
+        updateDeliveryStatus(webhookSettings.value)
+        state.value = 'ready'
     } catch (error) {
-        message.error((error as Error).message || "error");
+        loadError.value = (error as Error).message
+        state.value = 'error'
     }
 }
 
 const saveSettings = async () => {
-    if (webhookSettings.value.enabled && !filterValid.value) return
-    if (!webhookSettings.value.url) {
+    if (saving.value || (webhookSettings.value.enabled && !filterValid.value)) return
+    const url = webhookSettings.value.url.trim()
+    if (!url && webhookSettings.value.enabled) {
         message.error(t('urlMissing'))
         return
     }
     const settings = {
         ...webhookSettings.value,
+        url,
         filter: webhookSettings.value.enabled ? webhookSettings.value.filter : savedFilter.value,
     }
+    saving.value = true
     try {
         await props.saveSettings(settings)
         savedFilter.value = settings.filter ?? null
+        updateDeliveryStatus(settings)
         message.success(t('successTip'))
     } catch (error) {
         message.error((error as Error).message || "error");
+    } finally {
+        saving.value = false
     }
 }
 
@@ -247,7 +267,8 @@ const checkFilter = async () => {
 
 const testSettings = async () => {
     if (testing.value) return
-    if (!webhookSettings.value.url) {
+    const url = webhookSettings.value.url.trim()
+    if (!url) {
         message.error(t('urlMissing'))
         return
     }
@@ -259,6 +280,7 @@ const testSettings = async () => {
     try {
         await props.testSettings({
             ...webhookSettings.value,
+            url,
             ...(testMode.value === 'specified' ? { mail_id: testMailId.value } : {}),
         })
         message.success(t('successTip'))
@@ -270,58 +292,98 @@ const testSettings = async () => {
     }
 }
 
-onMounted(async () => {
-    await fetchData();
-})
+onMounted(fetchData)
 </script>
 
 <template>
-    <div class="center">
-        <n-card :bordered="false" embedded v-if="enableWebhook" style="max-width: 800px; overflow: auto;">
-            <n-flex justify="end">
-                <n-dropdown :options="presetDropdownOptions" @select="handlePresetSelect">
-                    <n-button secondary>
-                        {{ t('presets') }}
+    <div class="webhook-settings">
+        <n-card v-if="state === 'ready'" class="workspace-panel webhook-card" :bordered="false" :content-style="{ padding: 0 }">
+            <header class="webhook-section webhook-row">
+                <div class="webhook-title">
+                    <h2>{{ t('delivery') }}</h2>
+                    <n-tag :type="savedDelivery === 'active' ? 'success' : 'default'" size="small" :bordered="false" role="status">
+                        {{ t(savedDelivery) }}
+                    </n-tag>
+                </div>
+                <div class="webhook-control">
+                    <span>{{ t('enable') }}</span>
+                    <n-switch v-model:value="webhookSettings.enabled" :aria-label="t('enable')" />
+                </div>
+            </header>
+
+            <section class="webhook-section">
+                <div class="webhook-row webhook-section-heading">
+                    <h3>{{ t('destination') }}</h3>
+                    <div class="workspace-toolbar">
+                        <n-button v-if="presetDocs" tag="a" :href="presetDocs" target="_blank" rel="noopener noreferrer" text>
+                            {{ t('presetDocs') }}
+                        </n-button>
+                        <n-dropdown :options="presetDropdownOptions" @select="handlePresetSelect">
+                            <n-button secondary size="small">{{ t('presets') }}</n-button>
+                        </n-dropdown>
+                    </div>
+                </div>
+                <div class="webhook-destination">
+                    <n-form-item-row label="URL" :show-feedback="false">
+                        <n-input v-model:value="webhookSettings.url" placeholder="https://example.com/webhook"
+                            :input-props="{ 'aria-label': 'URL', spellcheck: false, autocapitalize: 'off' }" />
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('method')" :show-feedback="false">
+                        <n-select v-model:value="webhookSettings.method" filterable tag :options="[{ label: 'POST', value: 'POST' }]" />
+                    </n-form-item-row>
+                </div>
+            </section>
+
+            <section v-show="webhookSettings.enabled" class="webhook-section">
+                <div class="webhook-row webhook-section-heading">
+                    <h3>{{ t('filter') }}</h3>
+                    <n-button :disabled="!filterValid" secondary size="small" @click="showFilterCheckModal = true">
+                        {{ t('checkFilter') }}
                     </n-button>
-                </n-dropdown>
-                <n-button v-if="webhookSettings.enabled" @click="showTestModal = true" secondary>
-                    {{ t('test') }}
-                </n-button>
-                <n-button @click="saveSettings" type="primary" :disabled="webhookSettings.enabled && !filterValid">
-                    {{ t('save') }}
-                </n-button>
-            </n-flex>
-            <n-form-item-row :label="t('enable')">
-                <n-switch v-model:value="webhookSettings.enabled" :round="false" />
-            </n-form-item-row>
-            <n-form-item-row v-show="webhookSettings.enabled" :label="t('filter')">
+                </div>
                 <div class="webhook-filter">
                     <FilterEditor v-model="webhookSettings.filter" :fields="fields" :operators="operators" allow-custom-fields
                         :is-field-allowed="isFieldAllowed" @validity-change="filterValid = $event" />
-                    <n-text depth="3">{{ t('filterHelp') }}</n-text>
-                    <n-flex justify="end">
-                        <n-button :disabled="!filterValid" secondary @click="showFilterCheckModal = true">{{ t('checkFilter') }}</n-button>
-                    </n-flex>
+                    <p>{{ t('filterHelp') }}</p>
                 </div>
-            </n-form-item-row>
-            <div v-if="webhookSettings.enabled">
-                <n-form-item-row label="URL">
-                    <n-input v-model:value="webhookSettings.url" />
-                </n-form-item-row>
-                <n-form-item-row label="METHOD">
-                    <n-select v-model:value="webhookSettings.method" tag :options='[
-                        { label: "POST", value: "POST" }
-                    ]' />
-                </n-form-item-row>
-                <n-form-item-row label="HEADERS">
-                    <n-input v-model:value="webhookSettings.headers" type="textarea" :autosize="{ minRows: 3 }" />
-                </n-form-item-row>
-                <n-form-item-row label="BODY">
-                    <n-input v-model:value="webhookSettings.body" type="textarea" :autosize="{ minRows: 3 }" />
-                </n-form-item-row>
-            </div>
+            </section>
+
+            <section class="webhook-section">
+                <h3>{{ t('requestTemplate') }}</h3>
+                <div class="webhook-request">
+                    <n-form-item-row :label="t('headers')" :show-feedback="false">
+                        <n-input v-model:value="webhookSettings.headers" class="webhook-code" type="textarea"
+                            :autosize="{ minRows: 4, maxRows: 10 }" :input-props="{ 'aria-label': t('headers'), spellcheck: false }" />
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('body')" :show-feedback="false">
+                        <n-input v-model:value="webhookSettings.body" class="webhook-code" type="textarea"
+                            :autosize="{ minRows: 4, maxRows: 10 }" :input-props="{ 'aria-label': t('body'), spellcheck: false }" />
+                    </n-form-item-row>
+                </div>
+            </section>
+
+            <footer class="webhook-section webhook-actions">
+                <n-button @click="showTestModal = true" secondary
+                    :disabled="!webhookSettings.enabled || !webhookSettings.url.trim()">
+                    {{ t('test') }}
+                </n-button>
+                <n-button @click="saveSettings" type="primary" :loading="saving"
+                    :disabled="webhookSettings.enabled && (!filterValid || !webhookSettings.url.trim())">
+                    {{ t('save') }}
+                </n-button>
+            </footer>
         </n-card>
-        <n-result v-else status="404" :title="t('notEnabled')" />
+        <div v-else-if="state === 'loading'" class="workspace-panel webhook-section" role="status" aria-busy="true">
+            <n-skeleton text :repeat="3" />
+        </div>
+        <n-alert v-else-if="!available" type="info"
+            :title="t(admin ? 'notEnabledAdmin' : 'notEnabled')" />
+        <n-alert v-else type="error" :title="t('loadFailed')">
+            <div class="webhook-row">
+                <span>{{ loadError }}</span>
+                <n-button size="small" @click="fetchData">{{ t('retry') }}</n-button>
+            </div>
+        </n-alert>
         <n-modal v-model:show="showFilterCheckModal" preset="card" :title="t('checkFilter')"
             class="filter-check-modal" style="width: min(420px, calc(100vw - 32px))" :mask-closable="!checkingFilter"
             :close-on-esc="!checkingFilter" :closable="!checkingFilter">
@@ -347,6 +409,7 @@ onMounted(async () => {
         <n-modal v-model:show="showTestModal" preset="card" :title="t('test')"
             style="width: min(420px, calc(100vw - 32px))" :mask-closable="!testing"
             :close-on-esc="!testing" :closable="!testing">
+            <p class="webhook-test-note">{{ t('deliveryTestTip') }}</p>
             <n-radio-group v-model:value="testMode" :disabled="testing">
                 <n-space>
                     <n-radio value="random">{{ t('randomMail') }}</n-radio>
@@ -369,15 +432,76 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.center {
-    display: flex;
-    text-align: left;
-    place-items: center;
-    justify-content: center;
+.webhook-settings {
+    width: 100%;
+    max-width: 860px;
+    min-width: 0;
 }
 
-.n-button {
-    margin-top: 10px;
+.webhook-card {
+    background: var(--mail-surface);
+    border: 1px solid var(--mail-border);
+    border-radius: var(--mail-radius);
+}
+
+.webhook-section {
+    padding: clamp(14px, 2vw, 22px) clamp(14px, 2.25vw, 24px);
+}
+
+.webhook-section + .webhook-section {
+    border-top: 1px solid var(--mail-border);
+}
+
+.webhook-row, .webhook-control, .webhook-title, .webhook-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.webhook-row {
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.webhook-title {
+    flex-wrap: wrap;
+}
+
+.webhook-control {
+    font-size: 13px;
+}
+
+.webhook-settings :is(h2, h3) {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.webhook-section-heading {
+    margin-bottom: 10px;
+}
+
+.webhook-destination, .webhook-request {
+    display: grid;
+    gap: 12px;
+}
+
+.webhook-destination {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, 132px);
+}
+
+.webhook-request {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    margin-top: 12px;
+}
+
+.webhook-code {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+}
+
+.webhook-actions {
+    justify-content: flex-end;
 }
 
 .webhook-filter {
@@ -385,8 +509,19 @@ onMounted(async () => {
     min-width: 0;
 }
 
-.webhook-filter .n-button,
-.filter-check-modal .n-button {
-    margin-top: 0;
+.webhook-filter p, .webhook-test-note {
+    margin: 8px 0 0;
+    color: var(--mail-muted);
+    font-size: 12px;
+}
+
+.webhook-test-note {
+    margin: 0 0 12px;
+}
+
+@media (max-width: 560px) {
+    .webhook-destination, .webhook-request {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 </style>

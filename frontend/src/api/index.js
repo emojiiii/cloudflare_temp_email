@@ -55,13 +55,14 @@ const apiFetch = async (path, options = {}) => {
         if (customAuthHeader) headers['x-custom-auth'] = customAuthHeader;
         const adminAuthHeader = safeHeaderValue(adminAuth.value);
         if (adminAuthHeader) headers['x-admin-auth'] = adminAuthHeader;
-        const authorizationHeader = safeBearerHeader(jwt.value);
+        const authorizationHeader = safeBearerHeader(options.addressJwt ?? jwt.value);
         if (authorizationHeader) headers['Authorization'] = authorizationHeader;
 
         const initialResponse = await instance.request(path, {
             method: options.method || 'GET',
             data: options.body || null,
             headers,
+            signal: options.signal,
         });
         const response = await interceptResponse(path, initialResponse);
         if (ErrorCode.isAdminAuthError(response)) {
@@ -115,6 +116,7 @@ const getOpenSettings = async (message, notification) => {
             disableCustomAddressName: res["disableCustomAddressName"] || false,
             enableUserDeleteEmail: res["enableUserDeleteEmail"] || false,
             enableMailReadStatus: res["enableMailReadStatus"] === true,
+            translation: res["translation"] ?? null,
             enableAutoReply: res["enableAutoReply"] || false,
             enableIndexAbout: res["enableIndexAbout"] || false,
             copyright: res["copyright"] || openSettings.value.copyright,
@@ -169,6 +171,7 @@ const getSettings = async () => {
             address: res["address"],
             auto_reply: res["auto_reply"],
             send_balance: res["send_balance"],
+            send_unlimited: res["send_unlimited"],
         };
     } finally {
         settings.value.fetched = true;
@@ -231,11 +234,12 @@ const adminDeleteAddress = async (id) => {
     }
 }
 
-const bindUserAddress = async () => {
+const bindUserAddress = async (addressJwt) => {
     if (!userJwt.value) return;
     try {
         await apiFetch(`/user_api/bind_address`, {
             method: 'POST',
+            addressJwt,
         });
     } catch (error) {
         throw error;

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { useScopedI18n } from '@/i18n/app'
+import { userLocation } from '@/router/workspace-paths'
 import { useRouter } from 'vue-router'
 import { NewLabelOutlined, EmailOutlined, RedeemOutlined } from '@vicons/material'
 
@@ -40,10 +41,10 @@ const router = useRouter()
 
 const {
     jwt, loading, openSettings,
-    showAddressCredential, userSettings, addressPassword
+    showAddressCredential, userSettings, addressPassword, showUserSystem, isReceiveOnlyAccount,
 } = useGlobalState()
 
-const tabValue = ref('signin')
+const tabValue = ref(isReceiveOnlyAccount.value && openSettings.value.enableUserCreateEmail ? 'register' : 'signin')
 const credential = ref('')
 const emailName = ref("")
 const emailDomain = ref("")
@@ -55,6 +56,11 @@ const loginTurnstileRef = ref(null)
 const loginMethod = ref('credential') // 'credential' or 'password'
 const loginAddress = ref('')
 const loginPassword = ref('')
+
+const bindReceiveOnlyAddress = async (addressJwt, address) => {
+    await api.bindUserAddress(addressJwt)
+    await router.push({ ...userLocation('user_mail_box_tab', locale.value), query: { address } })
+}
 
 // 根据 openSettings 初始化登录方式
 const initLoginMethod = () => {
@@ -81,6 +87,10 @@ const login = async () => {
                     cf_token: loginCfToken.value
                 })
             });
+            if (isReceiveOnlyAccount.value) {
+                await bindReceiveOnlyAddress(res.jwt, res.address)
+                return
+            }
             jwt.value = res.jwt;
             await api.getSettings();
             try {
@@ -107,6 +117,10 @@ const login = async () => {
                 cf_token: loginCfToken.value
             })
         });
+        if (isReceiveOnlyAccount.value) {
+            await bindReceiveOnlyAddress(credential.value)
+            return
+        }
         jwt.value = credential.value;
         await api.getSettings();
         try {
@@ -177,6 +191,10 @@ const newEmail = async () => {
             cfToken.value,
             subdomainMode.value === "random"
         );
+        if (isReceiveOnlyAccount.value) {
+            await bindReceiveOnlyAddress(res.jwt, res.address)
+            return
+        }
         jwt.value = res["jwt"];
         addressPassword.value = res["password"] || '';
         await api.getSettings();
@@ -237,14 +255,15 @@ const domainsOptions = computed(() => {
     });
 });
 
-const showNewAddressTab = computed(() => {
-    if (openSettings.value.disableAnonymousUserCreateEmail
-        && !userSettings.value.user_email
-    ) {
-        return false;
-    }
-    return openSettings.value.enableUserCreateEmail;
-});
+const accountRequiredForCreation = computed(() =>
+    openSettings.value.enableUserCreateEmail
+    && openSettings.value.disableAnonymousUserCreateEmail
+    && !userSettings.value.user_email
+);
+
+const showNewAddressTab = computed(() =>
+    openSettings.value.enableUserCreateEmail && !accountRequiredForCreation.value
+);
 
 onMounted(async () => {
     if (!openSettings.value.domains || openSettings.value.domains.length === 0) {
@@ -256,19 +275,21 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div>
+    <section class="workspace-panel mailbox-login">
+        <span class="mailbox-login-mark" aria-hidden="true"><n-icon :component="EmailOutlined" /></span>
         <n-alert v-if="userSettings.user_email" :show-icon="false" :bordered="false" closable>
             <span>{{ t('bindUserInfo') }}</span>
         </n-alert>
-        <n-tabs v-if="openSettings.fetched" v-model:value="tabValue" size="large" justify-content="space-evenly">
+        <n-tabs v-if="openSettings.fetched" v-model:value="tabValue" size="medium" class="mailbox-login-tabs">
             <n-tab-pane name="signin" :tab="loginAndBindTag">
                 <n-form>
                     <div v-if="loginMethod === 'password'">
                         <n-form-item-row :label="t('email')" required>
-                            <n-input v-model:value="loginAddress" />
+                            <n-input v-model:value="loginAddress" :input-props="{ autocomplete: 'username', inputmode: 'email', 'aria-label': t('email') }" />
                         </n-form-item-row>
                         <n-form-item-row :label="t('password')" required>
-                            <n-input v-model:value="loginPassword" type="password" show-password-on="click"
+                            <n-input v-model:value="loginPassword" :input-props="{ autocomplete: 'current-password', 'aria-label': t('password') }"
+                                type="password" show-password-on="click"
                                 @keyup.enter="login" />
                         </n-form-item-row>
                     </div>
@@ -290,17 +311,11 @@ onMounted(async () => {
                         </n-button>
                     </div>
 
-                    <n-button @click="login" :loading="loading" type="primary" block secondary strong>
+                    <n-button @click="login" :loading="loading" type="primary" block strong>
                         <template #icon>
                             <n-icon :component="EmailOutlined" />
                         </template>
                         {{ loginAndBindTag }}
-                    </n-button>
-                    <n-button v-if="showNewAddressTab" @click="tabValue = 'register'" block secondary strong>
-                        <template #icon>
-                            <n-icon :component="NewLabelOutlined" />
-                        </template>
-                        {{ t('getNewEmail') }}
                     </n-button>
                     <div v-if="openSettings.enableRedeemCode" class="redeem-entry-section">
                         <n-divider />
@@ -357,14 +372,14 @@ onMounted(async () => {
                             </div>
                         </n-form-item-row>
                         <Turnstile v-model:value="cfToken" />
-                        <n-button type="primary" block secondary strong @click="newEmail" :loading="loading"
+                        <n-button type="primary" block strong @click="newEmail" :loading="loading"
                             :disabled="subdomainMode === 'custom' && !customSubdomain.trim()">
                             <template #icon>
                                 <n-icon :component="NewLabelOutlined" />
                             </template>
                             {{ t('getNewEmail') }}
                         </n-button>
-                        <div v-if="openSettings.enableRedeemCode" class="redeem-entry-section">
+                        <div v-if="openSettings.enableRedeemCode && !isReceiveOnlyAccount" class="redeem-entry-section">
                             <n-divider />
                             <n-text type="info" class="redeem-entry-tip">{{ t('redeemEntryTip') }}</n-text>
                             <n-button data-testid="redeem-entry-register" block secondary strong
@@ -379,21 +394,45 @@ onMounted(async () => {
                 </n-spin>
             </n-tab-pane>
             <n-tab-pane name="help" :tab="t('help')">
-                <n-alert :show-icon="false" :bordered="false">
-                    <span>{{ t('pleaseGetNewEmail') }}</span>
+                <n-alert v-if="showNewAddressTab || (showUserSystem && accountRequiredForCreation)"
+                    :show-icon="false" :bordered="false">
+                    <span>{{ t(accountRequiredForCreation ? 'signInToCreateMailbox' : 'pleaseGetNewEmail') }}</span>
                 </n-alert>
                 <AdminContact />
             </n-tab-pane>
         </n-tabs>
-    </div>
+    </section>
 </template>
 
 
 <style scoped>
+.mailbox-login {
+    width: 100%;
+    max-width: 440px;
+    margin: clamp(14px, 7vh, 78px) auto 22px;
+    padding: clamp(17px, 4vw, 34px);
+}
+
+.mailbox-login-mark {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    margin-bottom: 11px;
+    border-radius: 13px;
+    background: var(--mail-active);
+    color: var(--mail-accent);
+    font-size: 23px;
+}
+
+.mailbox-login-tabs {
+    min-width: 0;
+}
+
 .n-alert {
     margin-top: 10px;
     margin-bottom: 10px;
-    text-align: center;
+    text-align: start;
 }
 
 .n-form .n-button {

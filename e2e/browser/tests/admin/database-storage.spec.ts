@@ -12,9 +12,8 @@ test('persists the selected D1 plan and restores it after reload', async ({ page
 
   await page.addInitScript(() => {
     localStorage.setItem('adminAuth', 'e2e-admin-pass');
-    sessionStorage.setItem('adminTab', 'qucickSetup');
   });
-  await page.goto(`${FRONTEND_URL}/en/admin`);
+  await page.goto(`${FRONTEND_URL}/en/manage/setup`);
 
   const storagePanel = page.locator('.storage-panel');
   const planSelect = storagePanel.locator('.plan-select .n-select');

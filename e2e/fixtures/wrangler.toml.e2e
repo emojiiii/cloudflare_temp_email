@@ -15,6 +15,10 @@ USER_ROLES = [
   { domains = [], role = "empty-role", prefix = "EMPTY" },
 ]
 JWT_SECRET = "e2e-test-secret-key"
+# Synthetic 32-byte key used to encrypt test provider credentials.
+CREDENTIALS_ENCRYPTION_KEY = "dGVzdC1vbmx5LWtleS1mb3ItZTItd29ya2VyLWQxLSE="
+# Synthetic signing key used by the Resend callback regression test.
+RESEND_WEBHOOK_SECRET = "whsec_ZTJlLXJlc2VuZC13ZWJob29rLWZpeHR1cmUta2V5"
 TELEGRAM_BOT_TOKEN = "e2e-telegram-test-token"
 BLACK_LIST = "blocked-sender.e2e.invalid"
 ENABLE_USER_CREATE_EMAIL = true

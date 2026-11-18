@@ -53,27 +53,24 @@ test('mail colors stay readable in light and dark themes and preserve selection 
       await expect(items).toHaveCount(2);
       await page.mouse.move(0, 0);
       const selected = page.locator('.n-list-item.overlay');
-      const selectedColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      await expect(selected).toHaveCSS('background-color', selectedColor);
+      const unselected = page.locator('.n-list-item:not(.overlay)');
+      await expect(selected.getByRole('button').first()).toHaveAttribute('aria-current', 'true');
+      const selectedColor = await selected.evaluate(element => getComputedStyle(element).backgroundColor);
+      expect(selectedColor).not.toBe(await unselected.evaluate(element => getComputedStyle(element).backgroundColor));
       for (const item of [items.first(), items.last()]) {
-        expect(await textContrast(item.locator('.mail-summary-preview .n-text'))).toBeGreaterThanOrEqual(4.5);
+        expect(await textContrast(item.locator('.mail-summary-preview'))).toBeGreaterThanOrEqual(4.5);
         expect(await textContrast(item.locator('.mail-summary-date'))).toBeGreaterThanOrEqual(4.5);
       }
       const reader = page.locator('.mail-content-renderer');
-      for (const name of ['Reply', 'Forward', 'More actions', 'Delete']) {
+      for (const name of ['Reply', 'More actions', 'Delete']) {
         const button = reader.getByRole('button', { name, exact: true });
         await expect(button).toBeVisible();
         expect(await textContrast(button)).toBeGreaterThanOrEqual(4.5);
         await button.hover();
-        await expect(button).toHaveCSS('background-color', theme === 'dark'
-          ? 'rgba(255, 255, 255, 0.12)' : 'rgba(46, 51, 56, 0.09)');
         expect(await textContrast(button)).toBeGreaterThanOrEqual(4.5);
       }
-      const unselected = page.locator('.n-list-item:not(.overlay)');
       await unselected.hover();
-      await expect(unselected).toHaveCSS('background-color', theme === 'dark'
-        ? 'rgba(255, 255, 255, 0.04)' : 'rgb(243, 243, 245)');
-      expect(await textContrast(unselected.locator('.mail-summary-preview .n-text'))).toBeGreaterThanOrEqual(4.5);
+      expect(await textContrast(unselected.locator('.mail-summary-preview'))).toBeGreaterThanOrEqual(4.5);
       await selected.hover();
       await expect(selected).toHaveCSS('background-color', selectedColor);
     }
@@ -87,6 +84,53 @@ test('mail colors stay readable in light and dark themes and preserve selection 
 });
 
 test.describe('Inbox Browser Flow', () => {
+  test('searches messages beyond the current page and filters unread results', async ({ page }) => {
+    const api = await apiRequest.newContext();
+    const mailbox = await createTestAddress(api, 'inbox-search');
+    const subject = 'Quarterly handoff notes';
+    const sender = 'handoff-team@example.test';
+
+    try {
+      await seedTestMail(api, mailbox.address, { subject, from: sender });
+      await Promise.all(Array.from({ length: 20 }, (_, index) => seedTestMail(api, mailbox.address, {
+        subject: `Newer inbox message ${index}`,
+      })));
+
+      await page.goto(`${FRONTEND_URL}/en/?jwt=${mailbox.jwt}`);
+      const rows = page.locator('.mailbox-row');
+      await expect(rows).toHaveCount(20);
+      await expect(rows.getByText(subject, { exact: true })).toHaveCount(0);
+
+      const search = page.getByRole('textbox', { name: 'Search sender or subject' });
+      await search.fill('quarterly handoff');
+      await expect(rows).toHaveCount(1);
+      await expect(rows.getByText(subject, { exact: true })).toBeVisible();
+
+      const senderSearch = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/mails' && url.searchParams.get('q') === sender;
+      });
+      await search.fill(sender);
+      expect((await senderSearch).ok()).toBe(true);
+
+      const unread = page.getByRole('button', { name: 'Unread only', exact: true });
+      await unread.click();
+      await expect(unread).toHaveAttribute('aria-pressed', 'true');
+      await rows.getByText(subject, { exact: true }).click();
+      await expect(rows).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: subject, exact: true })).toBeVisible();
+
+      await unread.click();
+      await expect(rows.getByText(subject, { exact: true })).toBeVisible();
+    } finally {
+      try {
+        await deleteAddress(api, mailbox.jwt);
+      } finally {
+        await api.dispose();
+      }
+    }
+  });
+
   test('login via JWT, view inbox, open email', async ({ page }) => {
     // Create API context for setup
     const api = await apiRequest.newContext();
@@ -114,12 +158,66 @@ test.describe('Inbox Browser Flow', () => {
       // Click to open the email
       await mailItem.click();
 
-      // Verify the email detail panel shows the subject as a heading
-      // (n-card-header wraps n-card-header__main, both match heading role — use .first())
+      // The email detail panel exposes the subject as its heading.
       await expect(page.getByRole('heading', { name: subject }).first()).toBeVisible({ timeout: 5_000 });
     } finally {
       try {
         if (jwt) await deleteAddress(api, jwt);
+      } finally {
+        await api.dispose();
+      }
+    }
+  });
+
+  test('opens a blank reply with the reply address and conversation headers', async ({ page }) => {
+    const api = await apiRequest.newContext();
+    const mailbox = await createTestAddress(api, 'reply-browser');
+    try {
+      const subject = `Reply browser ${Date.now()}`;
+      const raw = [
+        'From: Sender <sender@test.example.com>',
+        'Reply-To: Replies <replies@test.example.com>',
+        `To: ${mailbox.address}`,
+        `Subject: ${subject}`,
+        'Message-ID: <original@test.example.com>',
+        'References: <ancestor@test.example.com>',
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        'I am the original message.',
+      ].join('\r\n');
+      const seeded = await api.post(`${WORKER_URL}/__test/receive_mail`, {
+        data: { from: 'bounce@test.example.com', to: mailbox.address, raw },
+      });
+      expect(seeded.ok()).toBe(true);
+      expect((await seeded.json()).success).toBe(true);
+
+      await page.goto(`${FRONTEND_URL}/en/?jwt=${mailbox.jwt}`);
+      await page.getByRole('listitem').getByText(subject).click();
+      await page.getByRole('button', { name: 'Reply', exact: true }).click();
+      await expect(page).toHaveURL(/\/compose$/);
+      await expect(page.locator('#send-mail-recipient-address')).toHaveValue('replies@test.example.com');
+      await expect(page.locator('#send-mail-subject')).toHaveValue(`Re: ${subject}`);
+      const body = page.locator('.compose-textarea textarea');
+      await expect(body).toHaveValue('');
+      await expect(body).toBeFocused();
+      await body.press('H');
+      await body.press('i');
+
+      await page.route('**/api/send_mail', route => route.request().method() === 'POST'
+        ? route.fulfill({ json: { status: 'ok' } }) : route.continue());
+      const request = page.waitForRequest(req => req.method() === 'POST' && req.url().endsWith('/api/send_mail'));
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      expect((await request).postDataJSON()).toMatchObject({
+        to_mail: 'replies@test.example.com',
+        subject: `Re: ${subject}`,
+        content: 'Hi\n\n> I am the original message.',
+        in_reply_to: '<original@test.example.com>',
+        references: ['<ancestor@test.example.com>'],
+      });
+      await expect(page).toHaveURL(/\/sent$/);
+    } finally {
+      try {
+        await deleteAddress(api, mailbox.jwt);
       } finally {
         await api.dispose();
       }
@@ -159,12 +257,7 @@ for (const layout of [
       await expect(item.locator('.mail-summary-sender')).toContainText(from);
       await expect(item.locator('.mail-summary-sender')).not.toContainText('From:');
       await expect(item.locator('.mail-summary-recipient')).toHaveCount(0);
-      await expect(item.locator('.mail-summary-sender .n-text').last()).toHaveCSS('font-size', '13px');
-      await expect(item.locator('.mail-summary-subject .n-text')).toHaveCSS('font-size', '15px');
-      expect(await item.locator('.mail-summary-subject .n-text').evaluate(element => Number(getComputedStyle(element).fontWeight)))
-        .toBeGreaterThan(await item.locator('.mail-summary-sender .n-text').last().evaluate(element => Number(getComputedStyle(element).fontWeight)));
-      expect(await item.locator('.mail-summary-sender .n-text').last().evaluate(element => getComputedStyle(element).color))
-        .not.toBe(await item.locator('.mail-summary-subject .n-text').evaluate(element => getComputedStyle(element).color));
+      await expect(item.locator('.mail-summary-sender')).toHaveAttribute('title', from);
       expect(await item.evaluate(element => {
         const sender = element.querySelector('.mail-summary-sender')!;
         const subject = element.querySelector('.mail-summary-subject')!;
@@ -172,7 +265,7 @@ for (const layout of [
         return Boolean(sender.compareDocumentPosition(subject) & Node.DOCUMENT_POSITION_FOLLOWING)
           && Boolean(subject.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING);
       })).toBe(true);
-      await expect(item.locator('.mail-summary-date')).toHaveText(/\d{2}\/\d{2}\/\d{2}/);
+      await expect(item.locator('.mail-summary-date')).toHaveText(/[A-Za-z]{3}\s+\d{1,2}/);
       await expect(item.locator('.mail-summary-date')).toHaveAttribute('title', /UTC/);
       expect(await item.locator('.mail-summary-date').evaluate(element =>
         element.scrollWidth <= element.clientWidth + 1
@@ -187,16 +280,13 @@ for (const layout of [
       await expect(reader.locator('.mail-details-footer')).not.toContainText('ID:');
       await expect(reader.locator('.mail-details .n-tag')).toHaveCount(0);
       const reply = reader.getByRole('button', { name: 'Reply', exact: true });
-      await expect(reply).toHaveClass(/n-button--info-type/);
-      await expect(reply).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(reply).toHaveClass(/n-button--primary-type/);
       expect(await textContrast(reply)).toBeGreaterThanOrEqual(4.5);
-      await expect(reader.getByRole('button', { name: 'Forward', exact: true })).toHaveClass(/n-button--default-type/);
+      await expect(reader.getByRole('button', { name: 'Forward', exact: true })).toHaveCount(0);
       const more = reader.getByRole('button', { name: 'More actions', exact: true });
-      await expect(more).toHaveText('More');
       await expect(more).toHaveClass(/n-button--default-type/);
       await expect(more).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       const remove = reader.getByRole('button', { name: 'Delete', exact: true });
-      await expect(remove).toHaveText('Delete');
       await expect(remove).toHaveClass(/n-button--error-type/);
       await expect(remove).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       const details = page.locator('.mail-details-modal');
@@ -204,6 +294,7 @@ for (const layout of [
         await more.focus();
         await page.keyboard.press('Enter');
         await expect(more).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.getByRole('button', { name: 'Forward', exact: true })).toBeVisible();
         const download = page.getByRole('link', { name: 'Download Mail' });
         await expect(download).toBeFocused();
         await page.keyboard.press('Tab');
@@ -266,13 +357,21 @@ for (const layout of [
         await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
         await expect(page.locator('.fullscreen-mail-content')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.locator('.n-drawer-header__close').last().click();
+      }
+
+      if (layout.width < 768) {
+        await expect(item).toHaveCount(0);
+        await page.getByRole('button', { name: 'Back to List', exact: true }).click();
+        await expect(item).toBeVisible();
       }
 
       if (layout.listView) {
-        await page.getByRole('button', { name: 'Multi Action', exact: true }).click();
+        await item.hover();
         const checkbox = item.getByRole('checkbox');
         await checkbox.click();
         await expect(checkbox).toBeChecked();
+        await expect(page.getByRole('status').getByText('1 selected', { exact: true })).toBeVisible();
         await checkbox.click();
         await expect(checkbox).not.toBeChecked();
       }
@@ -282,10 +381,9 @@ for (const layout of [
         await item.locator('.mail-summary-subject').click();
         await page.getByRole('button', { name: '更多操作', exact: true }).click();
         await page.getByRole('button', { name: '邮件详情', exact: true }).click();
-        await expect(details.getByRole('heading', { name: 'Mail details', exact: true }).first()).toBeVisible();
-        expect(await details.locator('.n-descriptions-table-content__label').allTextContents()).toEqual(
-          expect.arrayContaining(['Subject:', 'From:', 'Received at:', 'Message-ID:', 'ID:'])
-        );
+        await expect(details.getByRole('heading', { name: '邮件详情', exact: true }).first()).toBeVisible();
+        await expect(details).toContainText('发件人');
+        await expect(details).toContainText('Message-ID');
       }
     } finally {
       try {
@@ -320,9 +418,6 @@ for (const layout of [
       const preview = item.locator('.mail-summary-preview');
       const ellipsis = preview.locator('.n-ellipsis');
       await expect(ellipsis).toHaveCSS('-webkit-line-clamp', '1');
-      await expect(item).toHaveCSS('padding', '12px 14px');
-      await expect(item.locator('.mail-summary-subject')).toHaveCSS('margin-top', '4px');
-      await expect(preview).toHaveCSS('margin-top', '8px');
       if (layout.width > 768) {
         await expect(page.locator('.n-split')).toBeVisible();
         await expect(page.locator('.mail-content-renderer')).toBeVisible();
@@ -406,7 +501,6 @@ test('attachment action keeps its label, count and downloads on narrow mobile', 
     const item = page.getByRole('listitem').filter({ hasText: subject });
     const sender = item.locator('.mail-summary-sender');
     await expect(sender).toContainText('Reports Team');
-    await expect(sender).toContainText('sender@test.example.com');
     await expect(sender).toHaveAttribute('title', /sender@test\.example\.com/);
     await item.getByText(subject).click();
     const attachments = page.getByRole('button', { name: 'Attachments', exact: true });
@@ -467,23 +561,22 @@ for (const width of [1360, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await page.addInitScript(() => {
         localStorage.setItem('adminAuth', 'e2e-admin-pass');
-        sessionStorage.setItem('adminTab', 'mails');
       });
       for (const labels of [
-        { locale: 'en', from: 'From', to: 'To' },
-        { locale: 'zh', from: '发件人', to: '收件人' },
+        { locale: 'en', to: 'To' },
+        { locale: 'zh', to: '收件人' },
       ]) {
-        await page.goto(`${FRONTEND_URL}/${labels.locale}/admin`);
+        await page.goto(`${FRONTEND_URL}/${labels.locale}/manage/mail`);
         const item = page.getByRole('listitem').filter({ hasText: subject });
-        await expect(item.locator('.mail-summary-sender')).toHaveText(`${labels.from}: ${from}`);
+        await expect(item.locator('.mail-summary-sender')).toHaveText(from);
+        await expect(item.locator('.mail-summary-sender')).toHaveAttribute('title', from);
         await expect(item.locator('.mail-summary-recipient')).toHaveText(`${labels.to}: ${mailbox.address}`);
-        await expect(item.locator('.mail-summary-recipient')).toHaveCSS('margin-top', '4px');
         expect(await item.evaluate(element => {
           const sender = element.querySelector('.mail-summary-sender')!;
           const recipient = element.querySelector('.mail-summary-recipient')!;
           const subject = element.querySelector('.mail-summary-subject')!;
-          return Boolean(sender.compareDocumentPosition(recipient) & Node.DOCUMENT_POSITION_FOLLOWING)
-            && Boolean(recipient.compareDocumentPosition(subject) & Node.DOCUMENT_POSITION_FOLLOWING);
+          return Boolean(sender.compareDocumentPosition(subject) & Node.DOCUMENT_POSITION_FOLLOWING)
+            && Boolean(subject.compareDocumentPosition(recipient) & Node.DOCUMENT_POSITION_FOLLOWING);
         })).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       }

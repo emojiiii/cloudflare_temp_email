@@ -24,7 +24,7 @@ test.describe('Turnstile Login Endpoints (ENABLE_GLOBAL_TURNSTILE_CHECK disabled
   });
 
   test.describe('/open_api/admin_login', () => {
-    test('correct hashed password succeeds', async ({ request }) => {
+    test('password-only clients can still log in', async ({ request }) => {
       const res = await request.post(`${WORKER_URL}/open_api/admin_login`, {
         data: {
           password: hashPassword('e2e-admin-pass'),
@@ -36,9 +36,34 @@ test.describe('Turnstile Login Endpoints (ENABLE_GLOBAL_TURNSTILE_CHECK disabled
       expect(body.success).toBe(true);
     });
 
+    test('admin username and correct password succeed', async ({ request }) => {
+      const res = await request.post(`${WORKER_URL}/open_api/admin_login`, {
+        data: {
+          username: 'admin',
+          password: hashPassword('e2e-admin-pass'),
+          cf_token: ''
+        }
+      });
+      expect(res.ok()).toBe(true);
+      expect(await res.json()).toMatchObject({ success: true });
+    });
+
+    test('wrong username returns 401 even with the correct password', async ({ request }) => {
+      const res = await request.post(`${WORKER_URL}/open_api/admin_login`, {
+        data: {
+          username: 'other-user',
+          password: hashPassword('e2e-admin-pass'),
+          cf_token: ''
+        }
+      });
+      expect(res.status()).toBe(401);
+      expect(await res.json()).toMatchObject({ code: 'AUTH_ADMIN_CREDENTIAL_INVALID', message: expect.any(String) });
+    });
+
     test('wrong password returns 401', async ({ request }) => {
       const res = await request.post(`${WORKER_URL}/open_api/admin_login`, {
         data: {
+          username: 'admin',
           password: hashPassword('wrong-admin'),
           cf_token: ''
         }

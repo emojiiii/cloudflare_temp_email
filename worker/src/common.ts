@@ -9,6 +9,7 @@ import { AddressCreationSettings, AdminWebhookSettings, ExtractResult, WebhookMa
 import i18n from './i18n';
 import { formatWebhookBody, getWebhookAttachments } from './utils/webhook';
 import { compileFilter, type FilterValues } from './utils/filter';
+import { getLegacyResendKey, getStoredResendDomains, hasProviderCredential, isProviderStorageConfigured } from './provider_credentials';
 
 const DEFAULT_NAME_REGEX = /[^a-z0-9]/g;
 const DEFAULT_RANDOM_SUBDOMAIN_LENGTH = 8;
@@ -31,24 +32,22 @@ const areValidDomainLabels = (labels: string[]): boolean => {
 /**
  * Check if send mail is enabled for a specific domain
  */
-export const isSendMailEnabled = (
+const isSendMailTransportConfigured = (
     c: Context<HonoCustomType>,
     mailDomain: string
 ): boolean => {
-    // Check resend token for domain or global
-    const resendEnabled = c.env.RESEND_TOKEN || c.env[
-        `RESEND_TOKEN_${mailDomain.replace(/\./g, "_").toUpperCase()}`
-    ];
-    if (resendEnabled) return true;
+    if (getLegacyResendKey(c, mailDomain)) return true;
 
     // Check SMTP config for domain
     const smtpConfigMap = getJsonObjectValue<Record<string, WorkerMailerOptions>>(c.env.SMTP_CONFIG);
     if (getDomainMapValue(smtpConfigMap, mailDomain)) return true;
 
-    // Check SEND_MAIL binding
-    if (isSendMailBindingEnabled(c, mailDomain)) return true;
+    return isSendMailBindingEnabled(c, mailDomain);
+}
 
-    return false;
+export async function isSendMailEnabled(c: Context<HonoCustomType>, mailDomain: string): Promise<boolean> {
+    return isSendMailTransportConfigured(c, mailDomain)
+        || (isProviderStorageConfigured(c) && await hasProviderCredential(c, 'admin', 'resend', mailDomain));
 }
 
 export const isSendMailBindingEnabled = (
@@ -68,9 +67,14 @@ export const isSendMailBindingEnabled = (
 /**
  * Check if send mail is enabled for any configured domain
  */
-export const isAnySendMailEnabled = (c: Context<HonoCustomType>): boolean => {
+export async function getEnabledSendMailDomains(c: Context<HonoCustomType>): Promise<string[]> {
     const domains = getDomains(c);
-    return domains.some(domain => isSendMailEnabled(c, domain));
+    const stored = await getStoredResendDomains(c);
+    return domains.filter(domain => stored.has(domain) || isSendMailTransportConfigured(c, domain));
+}
+
+export async function isAnySendMailEnabled(c: Context<HonoCustomType>): Promise<boolean> {
+    return (await getEnabledSendMailDomains(c)).length > 0;
 }
 
 export const generateRandomName = (c: Context<HonoCustomType>): string => {
@@ -323,25 +327,31 @@ const insertAddressRecord = async (
     c: Context<HonoCustomType>,
     address: string,
     sourceMeta: string | undefined | null,
-    msgs: ReturnType<typeof i18n.getMessagesbyContext>
+    msgs: ReturnType<typeof i18n.getMessagesbyContext>,
+    protectSavedMail: boolean,
 ): Promise<void> => {
+    const claimCondition = protectSavedMail
+        ? ' WHERE NOT EXISTS (SELECT 1 FROM raw_mails WHERE address = ?)' : '';
+    const claimParams = protectSavedMail ? [address] : [];
     try {
         const result = await c.env.DB.prepare(
-            `INSERT INTO address(name, source_meta) VALUES(?, ?)`
-        ).bind(address, sourceMeta).run();
+            `INSERT INTO address(name, source_meta) SELECT ?, ?${claimCondition}`
+        ).bind(address, sourceMeta, ...claimParams).run();
         if (!result.success) {
             throw new Error(msgs.FailedCreateAddressMsg)
         }
+        if (!result.meta.changes) throw new Error(msgs.AddressAlreadyExistsMsg);
     } catch (e) {
         const message = (e as Error).message;
         // Fallback: source_meta field may not exist, try without it
         if (message && message.includes("source_meta")) {
             const result = await c.env.DB.prepare(
-                `INSERT INTO address(name) VALUES(?)`
-            ).bind(address).run();
+                `INSERT INTO address(name) SELECT ?${claimCondition}`
+            ).bind(address, ...claimParams).run();
             if (!result.success) {
                 throw new Error(msgs.FailedCreateAddressMsg)
             }
+            if (!result.meta.changes) throw new Error(msgs.AddressAlreadyExistsMsg);
             return;
         }
         throw e;
@@ -360,6 +370,7 @@ export const newAddress = async (
         checkAllowDomains = true,
         enableCheckNameRegex = true,
         sourceMeta = null,
+        protectSavedMail = false,
     }: {
         name: string, domain: string | undefined | null,
         enablePrefix: boolean,
@@ -369,6 +380,7 @@ export const newAddress = async (
         checkAllowDomains?: boolean,
         enableCheckNameRegex?: boolean,
         sourceMeta?: string | undefined | null,
+        protectSavedMail?: boolean,
     }
 ): Promise<{ address: string, jwt: string, password?: string | null, address_id: number }> => {
     const msgs = i18n.getMessagesbyContext(c);
@@ -439,7 +451,7 @@ export const newAddress = async (
         const address = `${name}@${addressDomain}`;
 
         try {
-            await insertAddressRecord(c, address, sourceMeta, msgs);
+            await insertAddressRecord(c, address, sourceMeta, msgs, protectSavedMail);
             await updateAddressUpdatedAt(c, address);
 
             const address_id = await c.env.DB.prepare(
@@ -463,7 +475,7 @@ export const newAddress = async (
             }
         } catch (e) {
             const message = (e as Error).message;
-            if (message && message.includes("UNIQUE")) {
+            if (message === msgs.AddressAlreadyExistsMsg || message?.includes("UNIQUE")) {
                 if (enableRandomSubdomain && attempt < maxAttempts - 1) {
                     continue;
                 }

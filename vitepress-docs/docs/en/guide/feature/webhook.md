@@ -14,9 +14,9 @@ This project uses [songquanpeng/message-pusher](https://github.com/songquanpeng/
 - You can use the service provided by [msgpusher.com](https://msgpusher.com)
 - You can also self-host the `message-pusher` service, refer to [songquanpeng/message-pusher](https://github.com/songquanpeng/message-pusher)
 
-## Admin Configure Global Webhook
+## Configure the global mail webhook
 
-![telegram](/feature/admin-mail-webhook.png)
+Open **Settings → Mail Webhook** to see the destination status once the Worker feature is enabled. Enter the receiving service URL. You can save the configuration with delivery paused, then enable and save it when ready. The global webhook delivers incoming messages that match the saved filter.
 
 ## Admin Allow Email to Use Webhook
 

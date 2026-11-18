@@ -15,7 +15,7 @@
 | -------------------------- | ----------- | -------- | ------------------------------------------ | --------------- | ------------------------------------ |
 | `DOMAINS`                  | JSON        | 是       | 用于临时邮箱的所有域名，支持多个域名       | 无              | `["awsl.uk", "dreamhunter2333.xyz"]` |
 | `JWT_SECRET`               | 文本/Secret | 是       | 用于签名 JWT 的密钥，JWT 用于登录鉴权。请使用随机字符串，例如通过 `openssl rand -hex 32` 生成 | 无 | `a1b2c3d4...` |
-| `ADMIN_PASSWORDS`          | JSON        | 否       | 管理后台密码；不配置时禁用管理员密码登录   | `[]`            | `["123", "456"]`                     |
+| `ADMIN_PASSWORDS`          | Secret/JSON | 否       | 管理后台密码。可将单个密码直接存为 Secret，也可使用 JSON 数组配置多个密码。未配置时关闭管理员密码登录 | `[]` | `["123", "456"]` |
 | `DISABLE_USER_SYSTEM`      | 文本/JSON   | 否       | 拦截用户系统接口，隐藏前端用户界面         | `false`         | `true` |
 | `ENABLE_USER_CREATE_EMAIL` | 文本/JSON   | 否       | 是否允许用户创建邮箱                       | `false`         | `true` |
 | `ENABLE_USER_DELETE_EMAIL` | 文本/JSON   | 否       | 是否允许用户删除邮件                       | `false`         | `true` |
@@ -99,6 +99,24 @@
 > ```
 >
 > SMTP 与 IMAP 可以使用不同主机名，便于反向代理或不同端口映射。
+
+## Resend 投递回调
+
+将 Resend Webhook 签名密钥存为 Worker Secret `RESEND_WEBHOOK_SECRET`。请参阅[投递状态配置](/zh/guide/feature/send-mail-api#resend-投递状态)。
+
+## 服务密钥和仅收信模式
+
+初始化 D1 或将现有数据库升级到 v0.0.15，再设置 Worker Secret `CREDENTIALS_ENCRYPTION_KEY`。将独立生成的 32 字节随机值编码为 Base64，Worker 用它加密 D1 中的服务密钥。恢复数据库时需要同一把加密密钥。
+
+用管理员密码登录后，在 **设置 → 服务密钥** 配置管理员的 DeepSeek Key 以及每个发件域名的 Resend Key。升级前已经设置 `DEEPSEEK_API_KEY`、`RESEND_TOKEN` 或域名专用 `RESEND_TOKEN_*` 时，可点击「迁移现有密钥」。核验发信和翻译后即可移除已迁移的旧变量。
+
+在 `[vars]` 中设置 `RECEIVE_ONLY_USERS = true` 后，普通用户可创建邮箱、收信和使用自己的密钥翻译来信。个人密钥在 **用户中心 → 设置** 保存，普通用户的翻译用量由自己的 DeepSeek 账户承担。发信和 AI 起草由管理员使用。
+
+## 邮件翻译
+
+读信时可以选择目标语言并随时切回原文。写信时先预览译文，再决定是否替换草稿。HTML 和富文本译文保留原有的段落、强调样式、列表、链接和图片。DeepSeek 收到的是正文文字，网页负责将译文放回原有结构。
+
+打开来信时自动显示 D1 已保存的译文，点「查看原文」可切回。没有缓存时保留原文，只有主动点击「翻译」才会把正文发送给 DeepSeek。
 
 ## 接受邮件相关变量
 

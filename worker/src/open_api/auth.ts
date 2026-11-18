@@ -26,7 +26,7 @@ api.post('/open_api/site_login', async (c) => {
 })
 
 api.post('/open_api/admin_login', async (c) => {
-    const { password, cf_token } = await c.req.json();
+    const { username = 'admin', password, cf_token } = await c.req.json();
     const msgs = i18n.getMessagesbyContext(c);
     if (utils.isGlobalTurnstileEnabled(c)) {
         try {
@@ -37,8 +37,8 @@ api.post('/open_api/admin_login', async (c) => {
     }
     const adminPasswords = getAdminPasswords(c);
     const hashedPasswords = await Promise.all(adminPasswords.map(p => hashPassword(p)));
-    if (!hashedPasswords.length || !password || !hashedPasswords.includes(password)) {
-        return c.json({ code: ErrorCode.AUTH_ADMIN_CREDENTIAL_INVALID, message: msgs.NeedAdminPasswordMsg }, 401)
+    if (username !== 'admin' || !hashedPasswords.length || !password || !hashedPasswords.includes(password)) {
+        return c.json({ code: ErrorCode.AUTH_ADMIN_CREDENTIAL_INVALID, message: msgs.InvalidAdminCredentialsMsg }, 401)
     }
     return c.json({ success: true })
 })

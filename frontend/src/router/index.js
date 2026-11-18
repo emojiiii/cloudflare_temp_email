@@ -1,9 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Index from '../views/Index.vue'
-import User from '../views/User.vue'
 import UserOauth2Callback from '../views/user/UserOauth2Callback.vue'
 import i18n from '../i18n'
 import { useGlobalState } from '../store'
+import { adminPathAliases, adminPaths, mailboxPaths, userPaths } from './workspace-paths'
 import {
     DEFAULT_LOCALE,
     getBrowserLocales,
@@ -13,36 +13,49 @@ import {
 } from '../i18n/utils'
 
 const { jwt, preferredLocale } = useGlobalState()
+const loadUser = () => import('../views/User.vue')
+const loadAdmin = () => import('../views/Admin.vue')
+
+const workspaceRoute = (workspace, section, path, component, view, aliases = []) => ({
+    path,
+    alias: [`/:lang${path}`, ...aliases.flatMap(alias => [alias, `/:lang${alias}`])],
+    component,
+    meta: { workspace, section, view },
+})
 
 const router = createRouter({
     history: createWebHistory(),
     routes: [
+        ...Object.entries(mailboxPaths).map(([section, path]) => workspaceRoute('mailbox', section, path, Index)),
         {
-            path: '/',
-            alias: '/:lang/',
-            component: Index
+            name: 'login',
+            path: '/login',
+            alias: '/:lang/login',
+            component: () => import('../views/Login.vue')
         },
+        ...Object.entries(userPaths).map(([section, path]) => workspaceRoute('user', section, path, loadUser)),
         {
-            path: '/user',
-            alias: '/:lang/user',
-            component: User
-        },
-        {
+            name: 'redeem',
             path: '/redeem',
             alias: '/:lang/redeem',
             component: () => import('../views/Redeem.vue')
         },
         {
+            name: 'user-oauth-callback',
             path: '/user/oauth2/callback',
             alias: '/:lang/user/oauth2/callback',
             component: UserOauth2Callback
         },
+        ...Object.entries(adminPaths).flatMap(([section, views]) => Object.entries(views)
+            .map(([view, path]) => workspaceRoute('admin', section, path, loadAdmin, view, adminPathAliases[view]))),
         {
             path: '/admin',
             alias: '/:lang/admin',
-            component: () => import('../views/Admin.vue')
+            component: loadAdmin,
+            meta: { workspace: 'admin', section: 'account', view: 'account' },
         },
         {
+            name: 'telegram-mail',
             path: '/telegram_mail',
             alias: '/:lang/telegram_mail',
             component: () => import('../views/telegram/Mail.vue')

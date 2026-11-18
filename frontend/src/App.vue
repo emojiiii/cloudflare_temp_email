@@ -1,167 +1,142 @@
 <script setup>
-import {
-  darkTheme,
-} from 'naive-ui'
-import { computed, onMounted, watchEffect } from 'vue'
+import { darkTheme } from 'naive-ui'
+import { computed, defineAsyncComponent, onMounted, watchEffect } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { useI18n } from 'vue-i18n'
 import { useGlobalState } from './store'
 import { useIsMobile } from './utils/composables'
-import Header from './views/Header.vue';
-import Footer from './views/Footer.vue';
-import { api } from './api'
+import Header from './views/Header.vue'
+import Footer from './views/Footer.vue'
 import { getNaiveLocaleConfig } from './i18n/naive-locale'
-import { DEFAULT_LOCALE, isSupportedLocale } from './i18n/utils'
+import { DEFAULT_LOCALE, getPathWithLocale, isSupportedLocale } from './i18n/utils'
 import { APP_CONFIG } from './config'
+import './workspace.css'
 
 const {
-  isDark, loading, useSideMargin, telegramApp, isTelegram
+    isDark, loading, useSideMargin, telegramApp, isTelegram,
+    adminAuth, jwt, openSettings, settings, showAuth, showAdminAuth, showAdminPage, showUserSystem,
+    userJwt, userSettings,
 } = useGlobalState()
-const adClient = APP_CONFIG.GOOGLE_AD_CLIENT;
-const adSlot = APP_CONFIG.GOOGLE_AD_SLOT;
-const { locale } = useI18n({ useScope: 'global' });
+const route = useRoute()
+const router = useRouter()
+const { locale } = useI18n({ useScope: 'global' })
+const AdminWorkspace = defineAsyncComponent(() => import('./views/Admin.vue'))
+const isLoginPage = computed(() => route.name === 'login')
+const adminWorkspace = computed(() => {
+    if (!adminAuth.value || userSettings.value.user_email) return undefined
+    if (showUserSystem.value && userJwt.value && !userSettings.value.fetched) return undefined
+    if (route.meta.workspace === 'user') return 'account'
+    if (route.meta.workspace === 'mailbox' && route.meta.section === 'mailbox' && (
+        typeof route.query.address === 'string' || !jwt.value || (settings.value.fetched && !settings.value.address)
+    )) {
+        return 'inbox'
+    }
+})
+const requiresLogin = computed(() => {
+    if (adminWorkspace.value) return showAdminAuth.value
+    if (route.meta.workspace === 'user') return !userSettings.value.user_email
+    return route.meta.workspace === 'admin' && (!showAdminPage.value || showAdminAuth.value)
+})
 const theme = computed(() => isDark.value ? darkTheme : null)
+const themeOverrides = computed(() => ({
+    common: {
+        fontFamily: 'var(--mail-font)',
+        borderRadius: '7px',
+        primaryColor: isDark.value ? '#a8b6ff' : '#304bc7',
+        primaryColorHover: isDark.value ? '#bbc6ff' : '#3f5adb',
+        primaryColorPressed: isDark.value ? '#91a3ff' : '#263eb0',
+        primaryColorSuppl: isDark.value ? '#bbc6ff' : '#3f5adb',
+        bodyColor: isDark.value ? '#10141e' : '#f5f7fb',
+        cardColor: isDark.value ? '#181d29' : '#ffffff',
+        modalColor: isDark.value ? '#181d29' : '#ffffff',
+        borderColor: isDark.value ? '#2a3245' : '#e0e6ef',
+    },
+    Card: { borderRadius: '10px', paddingMedium: '18px 20px' },
+    Button: { fontWeightStrong: '650', heightMedium: '34px' },
+    Tabs: { fontWeightActive: '650' },
+}))
 const localeConfig = computed(() => getNaiveLocaleConfig(isSupportedLocale(locale.value) ? locale.value : DEFAULT_LOCALE))
+const adClient = APP_CONFIG.GOOGLE_AD_CLIENT
+const adSlot = APP_CONFIG.GOOGLE_AD_SLOT
 const isMobile = useIsMobile()
-const showSideMargin = computed(() => !isMobile.value && useSideMargin.value);
-const showAd = computed(() => !isMobile.value && adClient && adSlot);
-const gridMaxCols = computed(() => showAd.value ? 8 : 12);
+const showAd = computed(() => !isMobile.value && !!adClient && !!adSlot)
 
 watchEffect(() => {
-  if (typeof document === 'undefined') return
-  document.documentElement.lang = isSupportedLocale(locale.value) ? locale.value : DEFAULT_LOCALE
+    document.documentElement.lang = isSupportedLocale(locale.value) ? locale.value : DEFAULT_LOCALE
 })
 
-if (showAd.value) {
-  useHead({
-    script: [{
-      src: `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adClient}`,
-      async: true,
-      crossorigin: 'anonymous',
-    }],
-  })
+watchEffect(() => {
+    if (!requiresLogin.value || !openSettings.value.fetched || showAuth.value) return
+    if (showUserSystem.value && userJwt.value && !userSettings.value.fetched) return
+    const language = isSupportedLocale(locale.value) ? locale.value : DEFAULT_LOCALE
+    void router.replace({
+        path: getPathWithLocale('/login', language),
+        query: route.meta.workspace === 'admin' || adminWorkspace.value ? { role: 'admin' } : {},
+    })
+})
+
+if (adClient && adSlot) {
+    useHead({
+        script: [{
+            src: `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${adClient}`,
+            async: true,
+            crossorigin: 'anonymous',
+        }],
+    })
 }
 
 onMounted(async () => {
-  try {
-    await api.getUserSettings();
-  } catch (error) {
-    console.error(error);
-  }
+    const token = APP_CONFIG.CF_WEB_ANALY_TOKEN
+    const hasBeacon = document.querySelector('script[src="https://static.cloudflareinsights.com/beacon.min.js"]')
+    if (token && !hasBeacon) {
+        const script = document.createElement('script')
+        script.defer = true
+        script.src = 'https://static.cloudflareinsights.com/beacon.min.js'
+        script.dataset.cfBeacon = JSON.stringify({ token })
+        document.body.appendChild(script)
+    }
 
-  const token = APP_CONFIG.CF_WEB_ANALY_TOKEN;
+    if (showAd.value) (window.adsbygoogle = window.adsbygoogle || []).push({})
 
-  const exist = document.querySelector('script[src="https://static.cloudflareinsights.com/beacon.min.js"]') !== null
-  if (token && !exist) {
-    const script = document.createElement('script');
-    script.defer = true;
-    script.src = 'https://static.cloudflareinsights.com/beacon.min.js';
-    script.dataset.cfBeacon = `{ token: ${token} }`;
-    document.body.appendChild(script);
-  }
-
-  // check if google ad is enabled
-  if (showAd.value) {
-    (window.adsbygoogle = window.adsbygoogle || []).push({});
-    (window.adsbygoogle = window.adsbygoogle || []).push({});
-  }
-
-
-  // check if telegram is enabled
-  const enableTelegram = APP_CONFIG.IS_TELEGRAM;
-  if (
-    (typeof enableTelegram === 'boolean' && enableTelegram === true)
-    ||
-    (typeof enableTelegram === 'string' && enableTelegram === 'true')
-  ) {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://telegram.org/js/telegram-web-app.js';
-      script.onload = resolve;
-      script.onerror = reject;
-      document.body.appendChild(script);
-    });
-    telegramApp.value = window.Telegram?.WebApp || {};
-    isTelegram.value = !!window.Telegram?.WebApp?.initData;
-  }
-});
+    if (APP_CONFIG.IS_TELEGRAM === true || APP_CONFIG.IS_TELEGRAM === 'true') {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://telegram.org/js/telegram-web-app.js'
+            script.onload = resolve
+            script.onerror = reject
+            document.body.appendChild(script)
+        })
+        telegramApp.value = window.Telegram?.WebApp || {}
+        isTelegram.value = !!window.Telegram?.WebApp?.initData
+    }
+})
 </script>
 
 <template>
-  <n-config-provider :locale="localeConfig.locale" :date-locale="localeConfig.dateLocale" :theme="theme">
-    <n-global-style />
-    <n-spin description="loading..." :show="loading">
-      <n-notification-provider container-style="margin-top: 60px;">
-        <n-message-provider container-style="margin-top: 20px;">
-          <n-grid x-gap="12" :cols="gridMaxCols">
-            <n-gi v-if="showSideMargin" span="1">
-              <div class="side" v-if="showAd">
-                <ins class="adsbygoogle" style="display:block" :data-ad-client="adClient" :data-ad-slot="adSlot"
-                  data-ad-format="auto" data-full-width-responsive="true"></ins>
-              </div>
-            </n-gi>
-            <n-gi :span="!showSideMargin ? gridMaxCols : (gridMaxCols - 2)">
-              <div class="main">
-                <n-space vertical>
-                  <n-layout style="min-height: 80vh;">
-                    <Header />
-                    <router-view></router-view>
-                  </n-layout>
-                  <Footer />
-                </n-space>
-              </div>
-            </n-gi>
-            <n-gi v-if="showSideMargin" span="1">
-              <div class="side" v-if="showAd">
-                <ins class="adsbygoogle" style="display:block" :data-ad-client="adClient" :data-ad-slot="adSlot"
-                  data-ad-format="auto" data-full-width-responsive="true"></ins>
-              </div>
-            </n-gi>
-          </n-grid>
-          <n-back-top />
-        </n-message-provider>
-      </n-notification-provider>
-    </n-spin>
-  </n-config-provider>
+    <n-config-provider :locale="localeConfig.locale" :date-locale="localeConfig.dateLocale"
+        :theme="theme" :theme-overrides="themeOverrides">
+        <n-global-style />
+        <n-notification-provider>
+            <n-message-provider>
+                <Header :standalone="isLoginPage || requiresLogin" :admin-inbox="adminWorkspace === 'inbox'">
+                    <template v-if="!isTelegram" #rail-footer>
+                        <Footer />
+                    </template>
+                    <router-view v-if="isLoginPage" />
+                    <template v-else-if="!requiresLogin">
+                        <div v-if="loading" class="workspace-progress" role="progressbar" />
+                        <div class="workspace-content" :class="{ 'workspace-content--wide': !useSideMargin }">
+                            <AdminWorkspace v-if="adminWorkspace" :workspace="adminWorkspace" />
+                            <router-view v-else />
+                        </div>
+                        <aside v-if="showAd" class="workspace-ad">
+                            <ins class="adsbygoogle" style="display: block" :data-ad-client="adClient" :data-ad-slot="adSlot"
+                                data-ad-format="auto" data-full-width-responsive="true" />
+                        </aside>
+                    </template>
+                </Header>
+            </n-message-provider>
+        </n-notification-provider>
+    </n-config-provider>
 </template>
-
-
-<style>
-.n-switch {
-  margin-left: 10px;
-  margin-right: 10px;
-}
-
-@media (hover: none) and (pointer: coarse) and (max-width: 1024px) {
-  :where(input, textarea, select, [contenteditable="true"]) {
-    font-size: 16px !important;
-  }
-
-  :where(.n-input, .n-input-number, .n-base-selection, .n-input-group-label) {
-    --n-font-size: 16px !important;
-  }
-}
-</style>
-
-<style scoped>
-.side {
-  height: 100vh;
-}
-
-.main {
-  height: 100vh;
-  text-align: center;
-}
-
-.n-grid {
-  height: 100%;
-}
-
-.n-gi {
-  height: 100%;
-}
-
-.n-space {
-  height: 100%;
-}
-</style>

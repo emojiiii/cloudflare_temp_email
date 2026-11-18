@@ -1,34 +1,27 @@
 <script setup>
-import { useScopedI18n } from '@/i18n/app'
-import { useGlobalState } from '../store'
 import DOMPurify from 'dompurify'
+import { useScopedI18n } from '../i18n/app'
+import { useGlobalState } from '../store'
+
 const { openSettings } = useGlobalState()
-
-
 const { t } = useScopedI18n('views.Footer')
-
 </script>
 
 <template>
-    <div>
-        <n-divider class="footer-divider" />
-        <div style="text-align: center; padding: 20px">
-            <n-space justify="center">
-                <n-text depth="3">
-                    {{ t('copyright') }} © 2023-{{ new Date().getFullYear() }}
-                </n-text>
-                <n-text depth="3">
-                    <div v-html="DOMPurify.sanitize(openSettings.copyright)"></div>
-                </n-text>
-            </n-space>
-        </div>
-    </div>
+    <footer v-if="openSettings.copyright" class="workspace-footer">
+        <span>{{ t('copyright') }} © {{ new Date().getFullYear() }}</span>
+        <span v-html="DOMPurify.sanitize(openSettings.copyright)" />
+    </footer>
 </template>
 
-
 <style scoped>
-.footer-divider {
-    margin: 0;
-    padding: 0 var(--x-padding);
+.workspace-footer {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 4px;
+    padding: 0 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--mail-muted);
 }
 </style>

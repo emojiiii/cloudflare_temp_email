@@ -483,7 +483,7 @@ onMounted(loadContext)
     width: 42px;
     height: 42px;
     place-items: center;
-    color: #18a058;
+    color: var(--mail-accent);
     font-size: 24px;
     background: rgba(24, 160, 88, 0.12);
     border-radius: 8px;
@@ -522,7 +522,7 @@ onMounted(loadContext)
 
 .type-card .n-icon {
     flex: 0 0 auto;
-    color: #18a058;
+    color: var(--mail-accent);
     font-size: 20px;
 }
 
@@ -531,9 +531,9 @@ onMounted(loadContext)
 }
 
 .type-card.active {
-    color: #18a058;
-    border-color: rgba(24, 160, 88, 0.55);
-    background: rgba(24, 160, 88, 0.08);
+    color: var(--mail-accent);
+    border-color: var(--mail-accent);
+    background: var(--mail-active);
 }
 
 .redeem-card > :deep(.n-card__content) > .n-divider {
@@ -567,7 +567,7 @@ onMounted(loadContext)
 
 .detail-heading > .n-icon {
     flex: 0 0 auto;
-    color: #18a058;
+    color: var(--mail-accent);
     font-size: 28px;
 }
 
@@ -599,7 +599,7 @@ onMounted(loadContext)
 }
 
 .success-state > .n-icon {
-    color: #18a058;
+    color: var(--mail-accent);
     font-size: 50px;
 }
 

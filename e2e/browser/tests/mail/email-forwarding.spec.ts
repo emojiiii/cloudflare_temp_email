@@ -19,8 +19,8 @@ test.describe.configure({ lock: 'forwarding-settings' });
 
 for (const locale of ['en', 'zh']) {
   const labels = locale === 'en'
-    ? { tab: 'Global Mailbox Settings', config: 'Config', save: 'Save', deleteOriginal: 'Delete original after forwarding', blockUnknown: 'Block receive unknow address email', any: 'Any', all: 'All', invalid: 'Invalid regex pattern', tooLong: 'Regex pattern too long' }
-    : { tab: '全局邮箱设置', config: '配置', save: '保存', deleteOriginal: '转发成功后删除原邮件', blockUnknown: '禁止接收未知地址邮件', any: '任一', all: '全部', invalid: '无效的正则表达式', tooLong: '正则表达式过长' };
+    ? { config: 'Config', save: 'Save', deleteOriginal: 'Delete original after forwarding', blockUnknown: 'Block receive unknow address email', any: 'Any', all: 'All', invalid: 'Invalid regex pattern', tooLong: 'Regex pattern too long' }
+    : { config: '配置', save: '保存', deleteOriginal: '转发成功后删除原邮件', blockUnknown: '禁止接收未知地址邮件', any: '任一', all: '全部', invalid: '无效的正则表达式', tooLong: '正则表达式过长' };
 
   test(`persists recipient filters and the forwarding delete-original switch (${locale})`, async ({ page, request, originalSettings: settings }, testInfo) => {
     expect((await request.post(`${WORKER_URL}/admin/account_settings`, {
@@ -32,15 +32,13 @@ for (const locale of ['en', 'zh']) {
     })).ok()).toBe(true);
     await page.addInitScript(() => {
       localStorage.setItem('adminAuth', 'e2e-admin-pass');
-      sessionStorage.setItem('adminTab', 'qucickSetup');
     });
     const loadSettings = async () => {
       const loaded = page.waitForResponse(response => (
         new URL(response.url()).pathname === '/admin/account_settings'
         && response.request().method() === 'GET'
       ));
-      await page.goto(`${FRONTEND_URL}/${locale}/admin`);
-      await page.getByText(labels.tab, { exact: true }).click();
+      await page.goto(`${FRONTEND_URL}/${locale}/manage/mailboxes/settings`);
       expect((await loaded).ok()).toBe(true);
     };
     const configButton = page.getByRole('button', { name: labels.config, exact: true });
@@ -96,13 +94,11 @@ for (const locale of ['en', 'zh']) {
     })).ok()).toBe(true);
     await page.addInitScript(() => {
       localStorage.setItem('adminAuth', 'e2e-admin-pass');
-      sessionStorage.setItem('adminTab', 'qucickSetup');
     });
     const loaded = page.waitForResponse(response => (
       new URL(response.url()).pathname === '/admin/account_settings' && response.request().method() === 'GET'
     ));
-    await page.goto(`${FRONTEND_URL}/${locale}/admin`);
-    await page.getByText(labels.tab, { exact: true }).click();
+    await page.goto(`${FRONTEND_URL}/${locale}/manage/mailboxes/settings`);
     expect((await loaded).ok()).toBe(true);
     await page.getByRole('button', { name: labels.config, exact: true }).click();
     const modal = page.getByRole('dialog');
@@ -142,15 +138,13 @@ for (const locale of ['en', 'zh']) {
       })).ok()).toBe(true);
       await page.addInitScript(() => {
         localStorage.setItem('adminAuth', 'e2e-admin-pass');
-        sessionStorage.setItem('adminTab', 'qucickSetup');
       });
       const openConfig = async () => {
         const loaded = page.waitForResponse(response => (
           new URL(response.url()).pathname === '/admin/account_settings'
           && response.request().method() === 'GET'
         ));
-        await page.goto(`${FRONTEND_URL}/${locale}/admin`);
-        await page.getByText(labels.tab, { exact: true }).click();
+        await page.goto(`${FRONTEND_URL}/${locale}/manage/mailboxes/settings`);
         expect((await loaded).ok()).toBe(true);
         await page.getByRole('button', { name: labels.config, exact: true }).click();
       };

@@ -1,18 +1,19 @@
 import { Context } from 'hono'
 
 import { handleListQuery } from '../common'
+import { sendboxDeliveryJoin, sendboxFields } from '../mails_api/resend_delivery';
 
 const list = async (c: Context<HonoCustomType>) => {
     const { address, limit, offset } = c.req.query();
     if (address) {
         return await handleListQuery(c,
-            `SELECT * FROM sendbox where address = ? `,
+            `SELECT ${sendboxFields} FROM sendbox sb${sendboxDeliveryJoin} WHERE sb.address = ?`,
             `SELECT count(*) as count FROM sendbox where address = ? `,
             [address], limit, offset
         );
     }
     return await handleListQuery(c,
-        `SELECT * FROM sendbox `,
+        `SELECT ${sendboxFields} FROM sendbox sb${sendboxDeliveryJoin}`,
         `SELECT count(*) as count FROM sendbox `,
         [], limit, offset
     );

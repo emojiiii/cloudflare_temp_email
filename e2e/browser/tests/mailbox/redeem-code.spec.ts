@@ -215,9 +215,8 @@ test('Admin can batch-create, search, export, and display a redemption result', 
   try {
     await page.addInitScript(() => {
       localStorage.setItem('adminAuth', 'e2e-admin-pass');
-      sessionStorage.setItem('adminTab', 'redeemCodes');
     });
-    await page.goto(`${FRONTEND_URL}/en/admin`);
+    await page.goto(`${FRONTEND_URL}/en/manage/redeem-codes`);
     await expect(page.getByTestId('redeem-admin-create')).toBeVisible();
     await page.getByTestId('redeem-admin-create').click();
 
@@ -314,9 +313,8 @@ test('Admin ignores a stale list response after switching redemption type', asyn
   });
   await page.addInitScript(() => {
     localStorage.setItem('adminAuth', 'e2e-admin-pass');
-    sessionStorage.setItem('adminTab', 'redeemCodes');
   });
-  await page.goto(`${FRONTEND_URL}/en/admin`);
+  await page.goto(`${FRONTEND_URL}/en/manage/redeem-codes`);
   await roleRequested;
 
   await page.getByTestId('redeem-admin-filter-type').click();
@@ -344,7 +342,6 @@ for (const { locale, roleRequired, roleType, addressType, create, generate, pref
   test(`Admin validates missing role and invalid prefix in ${locale}`, async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('adminAuth', 'e2e-admin-pass');
-      sessionStorage.setItem('adminTab', 'redeemCodes');
     });
     let createRequests = 0;
     page.on('request', (request) => {
@@ -353,7 +350,7 @@ for (const { locale, roleRequired, roleType, addressType, create, generate, pref
         createRequests++;
       }
     });
-    await page.goto(`${FRONTEND_URL}/${locale}/admin`);
+    await page.goto(`${FRONTEND_URL}/${locale}/manage/redeem-codes`);
     await expect(page.getByTestId('redeem-admin-filter-type')).toContainText(roleType);
     await page.getByRole('button', { name: create, exact: true }).click();
     const dialog = page.getByRole('dialog');

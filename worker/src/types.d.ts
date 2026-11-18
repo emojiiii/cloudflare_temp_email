@@ -55,9 +55,12 @@ type Bindings = {
     JWT_SECRET: string
     BLACK_LIST: string | undefined
     ENABLE_AUTO_REPLY: string | boolean | undefined
+    DEEPSEEK_API_KEY: string | undefined
+    CREDENTIALS_ENCRYPTION_KEY?: string
     ENABLE_WEBHOOK: string | boolean | undefined
     DISABLE_USER_SYSTEM: string | boolean | undefined
     ENABLE_USER_CREATE_EMAIL: string | boolean | undefined
+    RECEIVE_ONLY_USERS: string | boolean | undefined
     DISABLE_ANONYMOUS_USER_CREATE_EMAIL: string | boolean | undefined
     ENABLE_USER_DELETE_EMAIL: string | boolean | undefined
     ENABLE_ADDRESS_PASSWORD: string | boolean | undefined
@@ -101,6 +104,7 @@ type Bindings = {
 
     // resend
     RESEND_TOKEN: string | undefined
+    RESEND_WEBHOOK_SECRET: string | undefined
     [key: `RESEND_TOKEN_${string}`]: string | undefined
 
     // SMTP config
@@ -148,6 +152,7 @@ type UserPayload = {
 
 type Variables = {
     userPayload: UserPayload,
+    adminSenderOwner?: string,
     userRolePayload: string | undefined | null,
     jwtPayload: JwtPayload,
     lang: string | undefined | null

@@ -36,7 +36,7 @@ export async function resolveRawEmail(row: RawMailRow): Promise<string> {
  */
 export async function resolveRawEmailRow(row: RawMailRow): Promise<RawMailRow> {
     const raw = await resolveRawEmail(row);
-    const { raw_blob: _, ...rest } = row;
+    const { raw_blob: _, search_sender, search_subject, ...rest } = row;
     return { ...rest, raw };
 }
 

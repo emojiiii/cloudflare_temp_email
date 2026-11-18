@@ -10,7 +10,6 @@ async function mockStatistics(page: Page, initialFails = false) {
 
   await page.addInitScript(() => {
     localStorage.setItem('adminAuth', 'e2e-admin-pass');
-    sessionStorage.setItem('adminTab', 'statistics');
   });
   await page.route('**/admin/statistics?*', async route => {
     const params = new URL(route.request().url()).searchParams;
@@ -43,7 +42,7 @@ for (const initialFails of [false, true]) {
     const timeRange = page.getByRole('button', { name: 'Time range', exact: true });
 
     try {
-      await page.goto(`${FRONTEND_URL}/en/admin`);
+      await page.goto(`${FRONTEND_URL}/en/manage/statistics`);
       await expect.poll(() => requests).toEqual(['true']);
       await expect(timeRange).toBeDisabled();
     } finally {

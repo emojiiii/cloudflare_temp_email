@@ -3,6 +3,7 @@ import { createMimeMessage } from "mimetext";
 
 import { compressText } from "../gzip";
 import { getBooleanValue } from "../utils";
+import { getMailSearchHeaders } from './search-headers';
 
 let rawMailTableColumns: Set<string> | undefined;
 
@@ -30,14 +31,11 @@ export const storeRawMail = async (
 ): Promise<D1Result> => {
     const gzipEnabled = getBooleanValue(env.ENABLE_MAIL_GZIP);
     const readStatusEnabled = getBooleanValue(env.ENABLE_MAIL_READ_STATUS);
-    const requiredColumns: string[] = [];
+    const requiredColumns = ['search_sender', 'search_subject'];
     if (gzipEnabled) requiredColumns.push('raw_blob');
     if (readStatusEnabled) requiredColumns.push('is_unread');
 
-    let tableColumns = new Set<string>();
-    if (requiredColumns.length > 0) {
-        tableColumns = await getRawMailTableColumns(env, requiredColumns);
-    }
+    const tableColumns = await getRawMailTableColumns(env, requiredColumns);
 
     let rawBlob: ArrayBuffer | undefined;
     if (gzipEnabled && tableColumns.has('raw_blob')) {
@@ -48,25 +46,20 @@ export const storeRawMail = async (
         }
     }
 
-    const storeUnreadStatus = readStatusEnabled && tableColumns.has('is_unread');
-    if (rawBlob) {
-        if (!storeUnreadStatus) {
-            return env.DB.prepare(
-                `INSERT INTO raw_mails (source, address, raw_blob, message_id) VALUES (?, ?, ?, ?)`
-            ).bind(source, address, rawBlob, messageId).run();
-        }
-        return env.DB.prepare(
-            `INSERT INTO raw_mails (source, address, raw_blob, message_id, is_unread) VALUES (?, ?, ?, ?, 1)`
-        ).bind(source, address, rawBlob, messageId).run();
+    const columns = ['source', 'address', rawBlob ? 'raw_blob' : 'raw', 'message_id'];
+    const values: (string | number | ArrayBuffer | null)[] = [source, address, rawBlob ?? raw, messageId];
+    if (readStatusEnabled && tableColumns.has('is_unread')) {
+        columns.push('is_unread');
+        values.push(1);
     }
-    if (!storeUnreadStatus) {
-        return env.DB.prepare(
-            `INSERT INTO raw_mails (source, address, raw, message_id) VALUES (?, ?, ?, ?)`
-        ).bind(source, address, raw, messageId).run();
+    if (tableColumns.has('search_sender') && tableColumns.has('search_subject')) {
+        const search = getMailSearchHeaders(source, raw);
+        columns.push('search_sender', 'search_subject');
+        values.push(search.sender, search.subject);
     }
     return env.DB.prepare(
-        `INSERT INTO raw_mails (source, address, raw, message_id, is_unread) VALUES (?, ?, ?, ?, 1)`
-    ).bind(source, address, raw, messageId).run();
+        `INSERT INTO raw_mails (${columns.join(', ')}) VALUES (${values.map(() => '?').join(', ')})`
+    ).bind(...values).run();
 }
 
 export const deleteRawMail = async (

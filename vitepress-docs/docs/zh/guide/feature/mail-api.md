@@ -5,7 +5,7 @@
 邮箱 API 支持两种 JWT：原有邮箱凭据，以及带 `type: "address_password_login"`、`address`、`address_id`、`iat` 和 `exp` 的密码登录会话。后端继续校验签名和邮箱身份，并要求密码登录会话未过期、签发时间不晚于当前时间、有效期不超过 30 天。
 
 - 邮箱 API 继续使用 `Authorization: Bearer <jwt>`，无需数据库迁移。
-- `GET /api/settings` 仅返回 `address`、`send_balance` 和 `new_address_token`。有效密码登录 JWT 剩余不足 7 天时返回新的 30 天 token，否则为 `null`；原有凭据不会续期，已过期 JWT 必须重新登录。
+- `GET /api/settings` 返回 `address`、`send_balance`、`send_unlimited` 和 `new_address_token`。当 `send_unlimited` 为 `true` 时，不扣减单邮箱发信额度。有效密码登录 JWT 剩余不足 7 天时返回新的 30 天 token，否则为 `null`；原有凭据不会续期，已过期 JWT 必须重新登录。
 - 仅当 `new_address_token` 非 `null` 时，客户端才应保存它并替换当前 token；为 `null` 时继续使用当前 token。
 
 网页通过一次成功的 settings 请求仅更新当前使用的 JWT。本地缓存继续保存 token 字符串，沿用原来的追加和绑定逻辑，不替换或去重历史 token；切换到已过期的缓存会话后，需要重新登录。JWT 解码仅用于显示邮箱、登录方式和 Token 到期时间，权限由后端校验。
@@ -63,13 +63,67 @@ print(response.json())
 
 **注意**：`/admin/mails` 与 `/api/mails` 一致，返回的是邮件数据库中的 raw MIME 内容；如需正文/主题等可读字段，请在客户端自行解析 `raw`。
 
-**注意**：后端 API 已移除关键词过滤功能。如需按内容过滤邮件，请使用前端界面的过滤输入框，该功能可过滤当前显示的页面。
+## 按发件人、主题和未读状态筛选
+
+`GET /api/mails`、`GET /admin/mails` 和 `GET /user_api/mails` 支持以下可选参数，筛选在分页前执行，`count` 返回筛选后的总数。
+
+- `q` 匹配发件人名称、发件邮箱或主题的一部分，忽略大小写。
+- 启用邮件已读状态后，`unread=1` 只返回未读邮件，可与 `q` 一起使用。
+- 管理后台和用户中心可通过 `address` 限制到一个邮箱。省略时，搜索当前账号有权访问的所有邮箱。
+
+升级已有 D1 数据库时，先执行 `db/2026-11-18-mail-search.sql`，再用 `worker/scripts/backfill-mail-search.mjs` 将历史邮件加入搜索索引。
 
 ## 邮件已读状态 API
 
 启用 `ENABLE_MAIL_READ_STATUS` 并升级数据库后可使用。历史邮件的 `is_unread` 为 `NULL`，视为已读；新邮件为 `1`。用户在网页邮件列表中点击未读邮件后会将其设为已读，也可以在邮件详情中手动切换状态；刷新页面不会自动标记：
 
-- `PATCH /api/mails/:id/read`：设置当前地址下单封邮件的状态，请求体为 `{ "isUnread": true }`（未读）或 `{ "isUnread": false }`（已读）
+- `PATCH /api/mails/:id/read` 设置当前邮箱中邮件的状态。`PATCH /user_api/mails/:id/read` 用于账号绑定的邮箱，`PATCH /admin/mails/:id/read` 用于管理员管理的邮箱。
+- 三个接口均接受 `{ "isUnread": true }`（未读）或 `{ "isUnread": false }`（已读）。
+
+## 邮件翻译 API
+
+`GET /open_api/settings` 的 `translation` 字段为 `null` 时，站点未启用翻译。启用时，该字段包括 `provider`、`maxLength`、目标语言代码 `languages` 和缓存读取能力 `cacheOnly`。
+
+邮箱、绑定邮箱的用户中心和管理后台分别使用 `POST /api/translate`、`POST /user_api/translate` 和 `POST /admin/translate`，并沿用对应页面的鉴权。
+
+翻译已保存的来信时，可传入 `mailId`（D1 中的邮件 ID）来复用译文。富文本分批时，为同一目标语言下的每批传入从 0 开始的 `part`（默认 0，最大 29）。邮件访问权限、目标语言和输入都匹配时，Worker 从 D1 返回已有译文。响应头 `X-Mail-Translation-Cache` 表示命中或新生成。删除邮件时，D1 同步删除所有对应译文。草稿翻译省略 `mailId`。现有数据库需先升级到 v0.0.16。
+
+仅查询缓存时，同时传入 `mailId` 和 `cacheOnly: true`。命中时响应还包含实际的 `targetLanguage`，未命中时返回 HTTP 204，查询不会调用 DeepSeek。第 0 段可传入 `fallbackToCachedLanguage: true`，优先读取指定语言的译文，也可读取其他已缓存的语言。后续分段沿用响应中的语言。
+
+仅收信模式下，普通用户通过 `POST /user_api/translate` 翻译已绑定邮箱的来信。使用用户会话调用 `GET /user_api/provider_credentials` 可查看 `deepseekConfigured`，使用 `PUT /user_api/provider_credentials/deepseek` 及 JSON 请求体 `{"apiKey":"..."}` 保存个人密钥，使用 `DELETE` 删除。响应只包含配置状态。
+
+```json
+{
+  "text": "Could we move the meeting to Friday?",
+  "targetLanguage": "zh",
+  "provider": "deepseek"
+}
+```
+
+成功时返回 `{ "text": "我们可以把会议改到星期五吗？" }`。
+
+富文本翻译使用 `segments` 字符串数组取代 `text`。每次可提交 1 至 200 段纯文本，合计最多 `maxLength` 字符。响应中的 `segments` 按请求顺序返回，便于调用方还原格式。
+
+富文本请求可附带与 `segments` 等长的 `layout` 数组。每项为 `{ "block": 0, "anchored": true }`。同一段落内的片段使用相同的 `block`，其值为从 0 开始且小于片段总数的整数。使用布尔值 `anchored` 标记需要保留原位置的强调文字或链接文字。Worker 先结合上下文翻译标记片段并固定译文，再调整同段普通片段的语序。响应格式保持一致。
+
+同时含标记片段和普通片段时，Worker 会调用 DeepSeek 两次。
+
+## AI 起草回复 API
+
+配置管理员 DeepSeek Key 后，`GET /open_api/settings` 的 `aiReply` 字段会提供 `languages`、`maxSubjectLength`、`maxBodyLength` 和 `maxIntentLength`。未配置时该字段为 `null`。
+
+邮箱、用户中心与管理后台分别调用 `POST /api/ai_reply`、`POST /user_api/ai_reply` 与 `POST /admin/ai_reply`，沿用对应的鉴权方式。
+
+```json
+{
+  "subject": "Meeting on Friday",
+  "body": "Could we move our meeting to Friday afternoon?",
+  "intent": "礼貌回复周五下午可以，请对方确认具体时间。",
+  "targetLanguage": "auto"
+}
+```
+
+`targetLanguage` 为 `auto` 时会按原邮件的语言起草，也可以使用 `languages` 中的代码。`intent` 可省略或留空，DeepSeek 会仅根据来信主题和正文起草。接口返回 `{ "text": "…", "chineseText": "…" }`，分别用于回信正文和简体中文预览。用户可将 `text` 插入编辑器，编辑确认后沿用原收件地址和会话发送。
 
 ## admin 获取单封邮件 API
 

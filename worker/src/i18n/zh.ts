@@ -13,6 +13,7 @@ const messages: LocaleMessages = {
     UserAcceesTokenExpiredMsg: "您的访问令牌已过期, 请刷新页面",
     UserRoleIsNotAdminMsg: "您的用户角色不是管理员, 无权访问",
     NeedAdminPasswordMsg: "您需要提供管理员密码才能访问此页面",
+    InvalidAdminCredentialsMsg: "管理员用户名或密码不正确",
     AdminApiIpNotAllowedMsg: "当前 IP 不在管理员白名单中",
 
     KVNotAvailableMsg: "KV 不可用, 请联系管理员",
@@ -64,6 +65,13 @@ const messages: LocaleMessages = {
     OperationFailedMsg: "操作失败",
     RequiredFieldMsg: "缺少必填字段",
     InvalidInputMsg: "输入无效",
+    MailTranslationNotEnabledMsg: "邮件翻译尚未启用",
+    MailTranslationProviderChangedMsg: "翻译服务已变更，请刷新页面后再试",
+    MailTranslationQuotaMsg: "翻译服务的额度或频率已达上限",
+    MailTranslationFailedMsg: "翻译服务暂时无法完成翻译，请稍后再试",
+    MailReplyNotEnabledMsg: "AI 回信起草尚未启用",
+    MailReplyQuotaMsg: "AI 起草服务的额度或频率已达上限",
+    MailReplyFailedMsg: "AI 起草服务暂时无法生成回信，请稍后再试",
 
     // Address related
     NameTooShortMsg: "名称太短",
@@ -92,6 +100,7 @@ const messages: LocaleMessages = {
     InvalidAddressIdMsg: "无效的 address_id",
     EnableKVMsg: "请先启用 KV",
     EnableSendMailMsg: "请先启用 SEND_MAIL",
+    ReceiveOnlyMsg: "普通账号可创建邮箱、收信，并使用自己的密钥翻译来信。",
     EnableSendMailForDomainMsg: "请先为此域名启用 SEND_MAIL",
     InvalidCleanupConfigMsg: "无效的 cleanType 或 cleanDays",
     InvalidCleanTypeMsg: "无效的 cleanType",

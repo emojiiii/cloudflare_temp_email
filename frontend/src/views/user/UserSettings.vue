@@ -3,11 +3,12 @@ import { ref } from 'vue'
 import { useScopedI18n } from '@/i18n/app'
 import { startRegistration } from '@simplewebauthn/browser';
 import { NButton, NPopconfirm } from 'naive-ui'
+import ProviderCredentials from '@/components/ProviderCredentials.vue'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
 
-const { userJwt, userSettings, } = useGlobalState()
+const { userJwt, userSettings, loading } = useGlobalState()
 const message = useMessage()
 
 const showLogout = ref(false)
@@ -157,6 +158,7 @@ const renamePasskey = async () => {
 
 <template>
     <div class="center" v-if="userSettings.user_email">
+        <ProviderCredentials scope="user" />
         <n-card :bordered="false" embedded>
             <n-button @click="showPasskeyList = true; fetchPasskeyList();" secondary block strong>
                 {{ t('showPasskeyList') }}
@@ -205,13 +207,10 @@ const renamePasskey = async () => {
 
 <style scoped>
 .center {
-    display: flex;
-    justify-content: center;
-}
-
-
-.n-card {
+    display: grid;
+    gap: 14px;
     max-width: 800px;
+    margin-inline: auto;
     text-align: left;
 }
 

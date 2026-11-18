@@ -6,7 +6,7 @@ import { api } from '../../api'
 import WebhookComponent from '../../components/WebhookComponent.vue'
 
 const fetchData = async () => {
-    return await api.fetch(`/admin/mail_webhook/settings`)
+    return await api.fetch('/admin/mail_webhook/settings', { showLoading: false })
 }
 
 const saveSettings = async (webhookSettings: any) => {
@@ -32,5 +32,5 @@ const checkFilter = async (filter: any) => {
 </script>
 
 <template>
-    <WebhookComponent :fetchData="fetchData" :saveSettings="saveSettings" :testSettings="testSettings" :checkFilter="checkFilter" />
+    <WebhookComponent admin :fetchData="fetchData" :saveSettings="saveSettings" :testSettings="testSettings" :checkFilter="checkFilter" />
 </template>

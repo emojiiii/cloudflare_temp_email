@@ -8,8 +8,30 @@
 
 ## v1.14.0(main)
 
+- fix: |Settings| Unify navigation across settings, keep a single Inbox entry and give unassigned mail and the mail webhook dedicated pages.
+- fix: |Settings| Streamline provider keys, appearance, Telegram, and maintenance controls, and show whether the mail webhook has a destination.
+
+- feat: |Mail Translation| Show cached translations when opening mail across browsers. Generate a missing translation only on request.
+- feat: |Reply| Draft from the incoming email alone and review the bilingual preview before sending.
+
+- feat: |Mail Translation| Store incoming translations in D1 for reuse across browsers and delete them together with the original message.
+
+- feat: |Settings| Manage Resend keys by domain and personal DeepSeek keys by account. Keys are encrypted at rest and existing Worker provider secrets can be migrated.
+- feat: |Accounts| Receive-only mode allows ordinary users to create mailboxes, receive mail, and translate incoming messages with their own key.
+- fix: |Mail workspace| Streamline navigation for mail, accounts, and admin settings, show activity during a refresh, and display Telegram's setup status when unconfigured.
+
 ### Features
 
+- feat: |Sent mail| Receive Resend delivery events through a signed webhook and show delivery, bounces, and failure details across sending domains.
+- feat: |Mail| Preview AI replies in the sending language alongside Chinese. Replies start with a blank body, and successful submissions mark the original as replied. Sent items appear below Inbox and show submission status.
+- feat: |Reply| Draft a formal reply with DeepSeek from your notes, in the incoming message's language or a language you choose. Preview and edit the draft with the original sending address and reply thread intact.
+- feat: |Compose| Sync favorite senders and the default sender with the administrator account. New drafts use the default, and replies use the address that received the message.
+- feat: |Mail workspace| Search the entire mailbox by sender or subject and filter unread messages. Admin pages have dedicated routes, and compose offers saved sender addresses or a custom local part with a sending domain.
+- feat: |Interface| Switch mailboxes from inbox tabs or search, use a compact toolbar for selected messages, and open common administration pages directly from the workspace sidebar.
+- feat: |Login| Use `admin` as the default username for administrator password login. Show the account entry on the mailbox login page when creating a mailbox requires a user account.
+- feat: |Mail Translation| Use DeepSeek to translate opened messages and drafts into natural language that preserves intent, tone, and rich-text formatting. Choose a language, opt into automatic reading translation, and preview translated drafts before applying them.
+- feat: |Frontend| Unify mailbox, user center, and admin layouts with compact navigation, a simpler toolbar, a split desktop reader, and a dedicated mobile reading view.
+- feat: |Mail| Reply from the message reader using Reply-To and threading headers, and show unlimited sending explicitly in mailbox settings.
 - feat: |Mail Forwarding| Add recipient address regex filters to forwarding rules, reusing internal delivery with any/all matching
 - feat: |Mailbox Login| Keep session-token access with expiry details, hiding legacy credential contents and blocking legacy cache switches in password-only mode while retaining cache removal
 - feat: |Mailbox Sessions| Extend renewable 30-day JWT issuance to mailbox creation and authorized user, admin, and Telegram access
@@ -24,6 +46,9 @@
 
 ### Bug Fixes
 
+- fix: |Login| Reuse the administrator session in the Inbox and User Center, where an administrator can select a mailbox.
+- fix: |Login| Use a standalone `/login` page for account sign-in, registration, and `admin` access. Accept a single administrator password as a Worker Secret.
+- fix: |Mail Translation| Translate the original emphasized text in context before arranging the surrounding prose, so adjacent time phrases stay outside the emphasis.
 - fix: |CI| Wait for save and test responses in Webhook UI tests to avoid flaky assertions against missing or stale requests
 - fix: |Auto Update| Support an optional `UPSTREAM_SYNC_TOKEN` to sync workflow changes, retain the default token when unset, and declare the contents write permission required for syncing
 - fix: |Inbox| Keep the current message and restore the page and page size when pagination fails

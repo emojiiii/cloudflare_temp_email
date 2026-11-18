@@ -1,23 +1,35 @@
 <script setup>
 import { ref, h, onMounted, watch, computed } from 'vue';
-import { NBadge, useMessage } from 'naive-ui'
+import { NButton, NDropdown, NIcon, useMessage } from 'naive-ui'
+import { RouterLink, useRouter } from 'vue-router'
 import { useScopedI18n } from '@/i18n/app'
+import { adminWorkspaceLocation, mailboxLocation } from '@/router/workspace-paths'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
 import { hashPassword, utcToLocalDate } from '../../utils'
-import { NButton, NMenu } from 'naive-ui';
-import { MenuFilled } from '@vicons/material'
+import { MoreHorizOutlined, SearchOutlined } from '@vicons/material'
 import AddressCredentialModal from '../../components/AddressCredentialModal.vue'
 
-const {
-    loading, adminTab, openSettings,
-    adminMailTabAddress, adminSendBoxTabAddress,
-    useUTCDate
-} = useGlobalState()
+const { loading, openSettings, useUTCDate } = useGlobalState()
 const message = useMessage()
+const router = useRouter()
 
-const { t } = useScopedI18n('views.admin.Account')
+const props = defineProps({ accountWorkspace: Boolean })
+const { t, locale } = useScopedI18n('views.admin.Account')
+const mailLocation = (view, address) => {
+    const location = props.accountWorkspace && view === 'mails'
+        ? mailboxLocation('mailbox', locale.value)
+        : adminWorkspaceLocation('mails', view, locale.value)
+    return { ...location, query: { address } }
+}
+const renderMailCount = (row, view, count, label) => count > 0
+    ? h(RouterLink, {
+        to: mailLocation(view, row.name),
+        class: 'mailboxes-count-link',
+        'aria-label': `${t(label)} · ${row.name} · ${count}`,
+    }, { default: () => count })
+    : h('span', { class: 'mailboxes-count-empty' }, '0')
 
 const showEmailCredential = ref(false)
 const curEmailCredential = ref("")
@@ -269,7 +281,10 @@ const columns = computed(() => [
         title: t('emailAddress'),
         key: "name",
         sorter: true,
-        sortOrder: sortBy.value === 'name' ? sortOrder.value : false
+        sortOrder: sortBy.value === 'name' ? sortOrder.value : false,
+        render: row => props.accountWorkspace
+            ? h(RouterLink, { to: mailLocation('mails', row.name), class: 'mailboxes-address-link' }, { default: () => row.name })
+            : row.name,
     },
     {
         title: t('created_at'),
@@ -311,166 +326,74 @@ const columns = computed(() => [
     },
     {
         title: t('mail_count'),
-        key: "mail_count",
+        key: 'mail_count',
         sorter: true,
         sortOrder: sortBy.value === 'mail_count' ? sortOrder.value : false,
         render(row) {
-            return h(NButton,
-                {
-                    text: true,
-                    onClick: () => {
-                        if (row.mail_count > 0) {
-                            adminMailTabAddress.value = row.name;
-                            adminTab.value = "mails";
-                        }
-                    }
-                },
-                {
-                    icon: () => h(NBadge, {
-                        value: row.mail_count,
-                        'show-zero': true,
-                        max: 99,
-                        type: "success"
-                    }),
-                    default: () => row.mail_count > 0 ? t('viewMails') : ""
-                }
-            )
-        }
+            return renderMailCount(row, 'mails', row.mail_count, 'viewMails')
+        },
     },
     {
         title: t('send_count'),
-        key: "send_count",
+        key: 'send_count',
         sorter: true,
         sortOrder: sortBy.value === 'send_count' ? sortOrder.value : false,
         render(row) {
-            return h(NButton,
-                {
-                    text: true,
-                    onClick: () => {
-                        if (row.send_count > 0) {
-                            adminSendBoxTabAddress.value = row.name;
-                            adminTab.value = "sendBox";
-                        }
-                    }
-                },
-                {
-                    icon: () => h(NBadge, {
-                        value: row.send_count,
-                        'show-zero': true,
-                        max: 99,
-                        type: "success"
-                    }),
-                    default: () => row.send_count > 0 ? t('viewSendBox') : ""
-                }
-            )
-        }
+            return renderMailCount(row, 'sendBox', row.send_count, 'viewSendBox')
+        },
     },
     {
         title: t('actions'),
         key: 'actions',
         render(row) {
-            return h('div', [
-                h(NMenu, {
-                    mode: "horizontal",
-                    options: [
-                        {
-                            label: t('actions'),
-                            icon: () => h(MenuFilled),
-                            key: "action",
-                            children: [
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => showCredential(row)
-                                        },
-                                        { default: () => t('showCredential') }
-                                    ),
-                                },
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => {
-                                                adminMailTabAddress.value = row.name;
-                                                adminTab.value = "mails";
-                                            }
-                                        },
-                                        { default: () => t('viewMails') }
-                                    ),
-                                    show: row.mail_count > 0
-                                },
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => {
-                                                adminSendBoxTabAddress.value = row.name;
-                                                adminTab.value = "sendBox";
-                                            }
-                                        },
-                                        { default: () => t('viewSendBox') }
-                                    ),
-                                    show: row.send_count > 0
-                                },
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => {
-                                                curClearInboxAddressId.value = row.id;
-                                                showClearInbox.value = true;
-                                            }
-                                        },
-                                        { default: () => t('clearInbox') }
-                                    ),
-                                    show: row.mail_count > 0
-                                },
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => {
-                                                curClearSentItemsAddressId.value = row.id;
-                                                showClearSentItems.value = true;
-                                            }
-                                        },
-                                        { default: () => t('clearSentItems') }
-                                    ),
-                                    show: row.send_count > 0
-                                },
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => {
-                                                curResetPasswordAddressId.value = row.id;
-                                                showResetPassword.value = true;
-                                            }
-                                        },
-                                        { default: () => t('resetPassword') }
-                                    ),
-                                    show: openSettings.value?.enableAddressPassword
-                                },
-                                {
-                                    label: () => h(NButton,
-                                        {
-                                            text: true,
-                                            onClick: () => {
-                                                curDeleteAddressId.value = row.id;
-                                                showDeleteAccount.value = true;
-                                            }
-                                        },
-                                        { default: () => t('delete') }
-                                    )
-                                }
-                            ]
-                        }
-                    ]
-                })
-            ])
-        }
-    }
+            const actions = [
+                { key: 'showCredential', run: () => showCredential(row) },
+                ...row.mail_count > 0 ? [
+                    { key: 'viewMails', run: () => router.push(mailLocation('mails', row.name)) },
+                    {
+                        key: 'clearInbox', run: () => {
+                            curClearInboxAddressId.value = row.id
+                            showClearInbox.value = true
+                        },
+                    },
+                ] : [],
+                ...row.send_count > 0 ? [
+                    { key: 'viewSendBox', run: () => router.push(mailLocation('sendBox', row.name)) },
+                    {
+                        key: 'clearSentItems', run: () => {
+                            curClearSentItemsAddressId.value = row.id
+                            showClearSentItems.value = true
+                        },
+                    },
+                ] : [],
+                ...openSettings.value.enableAddressPassword ? [{
+                    key: 'resetPassword', run: () => {
+                        curResetPasswordAddressId.value = row.id
+                        showResetPassword.value = true
+                    },
+                }] : [],
+                {
+                    key: 'delete', run: () => {
+                        curDeleteAddressId.value = row.id
+                        showDeleteAccount.value = true
+                    },
+                },
+            ]
+            return h(NDropdown, {
+                options: actions.map(({ key }) => ({ key, label: t(key) })),
+                trigger: 'click',
+                onSelect: key => actions.find(action => action.key === key).run(),
+            }, {
+                default: () => h(NButton, {
+                    size: 'small',
+                    quaternary: true,
+                    circle: true,
+                    'aria-label': `${t('actions')} · ${row.name}`,
+                    title: t('actions'),
+                }, { icon: () => h(NIcon, { component: MoreHorizOutlined, size: 19 }) }),
+            })
+        },
+    },
 ])
 
 watch([page, pageSize], async () => {
@@ -483,7 +406,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div style="margin-top: 10px;">
+    <div class="mailboxes-panel">
         <AddressCredentialModal v-model:show="showEmailCredential" :address="curEmailAddress"
             :jwt="curEmailCredential" />
         <n-modal v-model:show="showDeleteAccount" preset="dialog" :title="t('deleteMailbox')">
@@ -522,13 +445,15 @@ onMounted(async () => {
                 </n-button>
             </template>
         </n-modal>
-        <n-input-group style="margin-bottom: 10px;">
-            <n-input v-model:value="addressQuery" clearable :placeholder="t('addressQueryTip')"
-                @keydown.enter="searchData" />
-            <n-button @click="searchData" type="primary" tertiary>
-                {{ t('query') }}
-            </n-button>
-        </n-input-group>
+        <form class="mailboxes-search" @submit.prevent="searchData">
+            <n-input-group>
+                <n-input v-model:value="addressQuery" clearable :placeholder="t('addressQueryTip')"
+                    :input-props="{ 'aria-label': t('addressQueryTip') }">
+                    <template #prefix><n-icon :component="SearchOutlined" /></template>
+                </n-input>
+                <n-button attr-type="submit" secondary>{{ t('query') }}</n-button>
+            </n-input-group>
+        </form>
 
         <n-space v-if="showMultiActionBar" style="margin-bottom: 10px;">
             <n-button @click="multiActionSelectAll" tertiary>
@@ -559,17 +484,17 @@ onMounted(async () => {
                 {{ t('selectedItems') }}: {{ selectedCount }}
             </n-tag>
         </n-space>
-        <div style="overflow: auto;">
-            <div style="display: inline-block;">
-                <n-pagination v-model:page="page" v-model:page-size="pageSize" :item-count="count"
-                    :page-sizes="[20, 50, 100]" show-size-picker>
-                    <template #prefix="{ itemCount }">
-                        {{ t('itemCount') }}: {{ itemCount }}
-                    </template>
-                </n-pagination>
-            </div>
+        <div class="mailboxes-table">
             <n-data-table v-model:checked-row-keys="checkedRowKeys" :columns="columns" :data="data" :bordered="false"
-                :row-key="row => row.id" remote @update:sorter="handleSorterChange" embedded />
+                :row-key="row => row.id" :scroll-x="1000" remote @update:sorter="handleSorterChange" />
+        </div>
+        <div class="mailboxes-pagination">
+            <n-pagination v-model:page="page" v-model:page-size="pageSize" :item-count="count"
+                :page-sizes="[20, 50, 100]" show-size-picker>
+                <template #prefix="{ itemCount }">
+                    {{ t('itemCount') }}: {{ itemCount }}
+                </template>
+            </n-pagination>
         </div>
 
         <!-- Multi-action progress modal -->
@@ -587,12 +512,55 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.n-pagination {
-    margin-top: 10px;
-    margin-bottom: 10px;
+.mailboxes-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
 }
 
-.n-data-table {
-    min-width: 1000px;
+.mailboxes-search {
+    width: min(100%, 420px);
+}
+
+.mailboxes-panel :deep(.mailboxes-address-link) {
+    color: var(--mail-accent);
+    text-underline-offset: 2px;
+}
+
+.mailboxes-table,
+.mailboxes-pagination {
+    min-width: 0;
+}
+
+.mailboxes-pagination {
+    display: flex;
+    justify-content: flex-end;
+    overflow-x: auto;
+}
+
+.mailboxes-panel :deep(.mailboxes-count-link),
+.mailboxes-panel :deep(.mailboxes-count-empty) {
+    display: inline-grid;
+    place-items: center;
+    min-width: 28px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.mailboxes-panel :deep(.mailboxes-count-link) {
+    color: var(--mail-accent, #18735a);
+    background: color-mix(in srgb, var(--mail-accent, #18735a) 11%, var(--mail-surface, #fff));
+    text-decoration: none;
+}
+
+.mailboxes-panel :deep(.mailboxes-count-link:hover) {
+    text-decoration: underline;
+}
+
+.mailboxes-panel :deep(.mailboxes-count-empty) {
+    color: var(--mail-muted, #5b6d63);
 }
 </style>

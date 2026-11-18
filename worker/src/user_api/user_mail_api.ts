@@ -1,27 +1,30 @@
 import { Context } from "hono";
 import i18n from "../i18n";
-import { handleMailListQuery } from "../common";
 import { getBooleanValue } from "../utils";
+import { listInboxMails, updateInboxReadStatus } from '../mails_api/inbox';
+
+const userOwnsMail = `EXISTS (SELECT 1 FROM users_address ua`
+    + ` JOIN address a ON a.id = ua.address_id`
+    + ` WHERE ua.user_id = ? AND a.name = raw_mails.address)`;
 
 export default {
     getMails: async (c: Context<HonoCustomType>) => {
         const { user_id } = c.get("userPayload");
-        const { address, limit, offset } = c.req.query();
-        const filterQuerys = [`ua.user_id = ?`];
+        const address = c.req.query('address');
+        const filters = ['ua.user_id = ?'];
         const filterParams = [String(user_id)];
         if (address) {
-            filterQuerys.push(`rm.address = ?`);
+            filters.push('rm.address = ?');
             filterParams.push(address);
         }
-        const fromQuery = ` FROM users_address ua`
+        const from = `users_address ua`
             + ` JOIN address a ON a.id = ua.address_id`
-            + ` JOIN raw_mails rm ON rm.address = a.name`
-            + ` WHERE ${filterQuerys.join(" AND ")}`;
-        return await handleMailListQuery(c,
-            `SELECT rm.*${fromQuery}`,
-            `SELECT count(*) as count${fromQuery}`,
-            filterParams, limit, offset, 'rm.id desc'
-        );
+            + ` JOIN raw_mails rm ON rm.address = a.name`;
+        return listInboxMails(c, from, filters, filterParams);
+    },
+    updateMailReadStatus: (c: Context<HonoCustomType>) => {
+        const { user_id } = c.get('userPayload');
+        return updateInboxReadStatus(c, ` AND ${userOwnsMail}`, [String(user_id)]);
     },
     deleteMail: async (c: Context<HonoCustomType>) => {
         const msgs = i18n.getMessagesbyContext(c);
@@ -31,12 +34,7 @@ export default {
         const { id } = c.req.param();
         const { user_id } = c.get("userPayload");
         const { success } = await c.env.DB.prepare(
-            `DELETE FROM raw_mails WHERE id = ?`
-            + ` AND EXISTS (`
-            + `SELECT 1 FROM users_address ua`
-            + ` JOIN address a ON a.id = ua.address_id`
-            + ` WHERE ua.user_id = ? AND a.name = raw_mails.address`
-            + `)`
+            `DELETE FROM raw_mails WHERE id = ? AND ${userOwnsMail}`
         ).bind(id, user_id).run();
         return c.json({
             success: success

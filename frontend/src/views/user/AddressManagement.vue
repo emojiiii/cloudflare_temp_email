@@ -1,7 +1,8 @@
 <script setup>
-import { ref, h, onMounted, watch } from 'vue';
+import { computed, ref, h, onMounted, watch } from 'vue';
 import { useScopedI18n } from '@/i18n/app'
-import { useRouter } from 'vue-router';
+import { userLocation } from '@/router/workspace-paths'
+import { RouterLink, useRouter } from 'vue-router';
 import { NBadge, NPopconfirm, NButton } from 'naive-ui'
 
 import { useGlobalState } from '../../store'
@@ -11,7 +12,7 @@ import AddressCredentialModal from '../../components/AddressCredentialModal.vue'
 
 import Login from '../common/Login.vue';
 
-const { jwt, openSettings, loading } = useGlobalState()
+const { jwt, openSettings, loading, isReceiveOnlyAccount } = useGlobalState()
 const message = useMessage()
 const router = useRouter()
 
@@ -145,7 +146,7 @@ const searchData = () => {
     }
 }
 
-const columns = [
+const columns = computed(() => [
     {
         title: t('emailAddress'),
         key: "name"
@@ -162,7 +163,7 @@ const columns = [
             })
         }
     },
-    {
+    ...(!isReceiveOnlyAccount.value ? [{
         title: t('send_count'),
         key: "send_count",
         render(row) {
@@ -173,11 +174,21 @@ const columns = [
                 type: "success"
             })
         }
-    },
+    }] : []),
     {
         title: t('actions'),
         key: 'actions',
         render(row) {
+            if (isReceiveOnlyAccount.value) {
+                return h(RouterLink, {
+                    custom: true,
+                    to: { ...userLocation('user_mail_box_tab', locale.value), query: { address: row.name } },
+                }, {
+                    default: ({ href, navigate }) => h(NButton, {
+                        tag: 'a', href, onClick: navigate, tertiary: true, type: 'primary',
+                    }, { default: () => t('openMailbox') }),
+                })
+            }
             return h('div', [
                 h(NButton,
                     {
@@ -232,7 +243,7 @@ const columns = [
             ])
         }
     }
-]
+])
 
 onMounted(async () => {
     await fetchData()
@@ -245,9 +256,9 @@ watch([page, pageSize], async () => {
 
 <template>
     <div>
-        <AddressCredentialModal v-model:show="showAddressCredential" :address="credentialAddress"
+        <AddressCredentialModal v-if="!isReceiveOnlyAccount" v-model:show="showAddressCredential" :address="credentialAddress"
             :jwt="currentAddressCredential" />
-        <n-modal v-model:show="showTranferAddress" preset="dialog" :title="t('transferAddress')">
+        <n-modal v-if="!isReceiveOnlyAccount" v-model:show="showTranferAddress" preset="dialog" :title="t('transferAddress')">
             <span>
                 <p>{{ t("transferAddressTip") }}</p>
                 <p>{{ t('transferAddress') + ": " + currentAddress }}</p>
@@ -275,7 +286,8 @@ watch([page, pageSize], async () => {
                             {{ t('itemCount') }}: {{ itemCount }}
                         </template>
                     </n-pagination>
-                    <n-data-table :columns="columns" :data="data" :bordered="false" embedded />
+                    <n-data-table :class="{ 'address-table--full': !isReceiveOnlyAccount }" :columns="columns"
+                        :data="data" :bordered="false" embedded />
                 </div>
             </n-tab-pane>
             <n-tab-pane name="create_or_bind" :tab="t('create_or_bind')">
@@ -286,7 +298,7 @@ watch([page, pageSize], async () => {
 </template>
 
 <style scoped>
-.n-data-table {
+.address-table--full {
     min-width: 640px;
 }
 

@@ -13,6 +13,7 @@ const messages: LocaleMessages = {
     UserAcceesTokenExpiredMsg: "Your access token has expired, please refresh the page",
     UserRoleIsNotAdminMsg: "Your user role is not admin, no access to visit this page",
     NeedAdminPasswordMsg: "You need to provide the admin password to access this page",
+    InvalidAdminCredentialsMsg: "The administrator username or password is incorrect",
     AdminApiIpNotAllowedMsg: "Your IP address isn't on the admin whitelist",
 
     KVNotAvailableMsg: "KV is not available, please contact the administrator",
@@ -64,6 +65,13 @@ const messages: LocaleMessages = {
     OperationFailedMsg: "Operation failed",
     RequiredFieldMsg: "Required field is missing",
     InvalidInputMsg: "Invalid input",
+    MailTranslationNotEnabledMsg: "Mail translation is disabled",
+    MailTranslationProviderChangedMsg: "The translation provider changed. Refresh the page and try again.",
+    MailTranslationQuotaMsg: "The translation provider reached its quota or rate limit",
+    MailTranslationFailedMsg: "The translation provider could not complete the translation. Try again later.",
+    MailReplyNotEnabledMsg: "AI reply drafting is disabled",
+    MailReplyQuotaMsg: "The AI drafting provider reached its quota or rate limit",
+    MailReplyFailedMsg: "The AI drafting provider could not generate a reply. Try again later.",
 
     // Address related
     NameTooShortMsg: "Name is too short",
@@ -92,6 +100,7 @@ const messages: LocaleMessages = {
     InvalidAddressIdMsg: "Invalid address_id",
     EnableKVMsg: "Please enable KV first",
     EnableSendMailMsg: "Please enable SEND_MAIL first",
+    ReceiveOnlyMsg: "This account can create mailboxes, receive email and translate incoming mail with its own key.",
     EnableSendMailForDomainMsg: "Please enable SEND_MAIL for this domain first",
     InvalidCleanupConfigMsg: "Invalid cleanType or cleanDays",
     InvalidCleanTypeMsg: "Invalid cleanType",

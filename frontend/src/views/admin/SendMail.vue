@@ -2,14 +2,18 @@
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import { useScopedI18n } from '@/i18n/app'
-import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useSessionStorage } from '@vueuse/core'
 import { SendRound } from '@vicons/material'
 import { api } from '../../api'
+import AdminSenderPicker from '../../components/AdminSenderPicker.vue'
 import ShadowHtmlComponent from '../../components/ShadowHtmlComponent.vue'
+import DraftTranslation from '../../components/DraftTranslation.vue'
+import ReplyDraftAI from '../../components/ReplyDraftAI.vue'
 import { useGlobalState } from '../../store'
 import { blockRemoteContent } from '../../utils/remote-content-policy'
 import { sanitizeHtml } from '../../utils/sanitize-html'
+import { insertAIReplyText } from '../../utils/mail-actions'
 
 const message = useMessage()
 const isPreview = ref(false)
@@ -17,7 +21,14 @@ const editorRef = shallowRef()
 const sending = ref(false)
 const { autoLoadRemoteImages, isDark } = useGlobalState()
 
-const sendMailModel = useSessionStorage('sendMailByAdminModel', {
+const props = defineProps({
+    initialDraft: { type: Object, default: null },
+    reply: Boolean,
+    replySource: Object,
+})
+const emit = defineEmits(['sent'])
+const embedded = Boolean(props.initialDraft)
+const emptyDraft = {
     fromName: "",
     fromMail: "",
     toName: "",
@@ -25,7 +36,42 @@ const sendMailModel = useSessionStorage('sendMailByAdminModel', {
     subject: "",
     contentType: 'text',
     content: "",
-});
+    inReplyTo: "",
+    references: [],
+}
+const sendMailModel = embedded
+    ? ref({ ...emptyDraft, ...props.initialDraft })
+    : useSessionStorage('sendMailByAdminModel', { ...emptyDraft })
+
+const applyAIReply = (text) => {
+    insertAIReplyText(sendMailModel.value, text)
+    isPreview.value = false
+}
+
+const hasDraftContent = computed(() => {
+    const { fromName, toName, toMail, subject, content, contentType } = sendMailModel.value
+    return Boolean(fromName || toName || toMail || subject || content || (contentType && contentType !== 'text'))
+})
+const useInitialDefault = ref(!embedded && !sendMailModel.value.fromMail && !hasDraftContent.value)
+const accountDefault = ref('')
+const selectedSender = computed({
+    get: () => sendMailModel.value.fromMail || (useInitialDefault.value ? accountDefault.value : ''),
+    set: address => {
+        useInitialDefault.value = false
+        sendMailModel.value.fromMail = address
+    },
+})
+
+const receiveDefaultSender = (address) => {
+    if (useInitialDefault.value && accountDefault.value && accountDefault.value !== address) {
+        selectedSender.value = accountDefault.value
+    }
+    accountDefault.value = address
+}
+
+watch([hasDraftContent, selectedSender], ([hasContent, address]) => {
+    if (useInitialDefault.value && hasContent && address) selectedSender.value = address
+})
 
 const { t } = useScopedI18n('views.admin.SendMail')
 
@@ -75,13 +121,17 @@ const send = async () => {
         return
     }
 
-    const fromMail = `${sendMailModel.value.fromMail ?? ''}`.trim()
+    const fromMail = selectedSender.value.trim()
     const toMail = `${sendMailModel.value.toMail ?? ''}`.trim()
     const subject = `${sendMailModel.value.subject ?? ''}`.trim()
     const content = `${sendMailModel.value.content ?? ''}`
 
     if (!fromMail) {
         message.error(t('fromMailEmpty'))
+        return
+    }
+    if (!/^[^\s@<>]+@[^\s@<>]+$/.test(fromMail)) {
+        message.error(t('fromMailInvalid'))
         return
     }
     if (!subject) {
@@ -92,7 +142,8 @@ const send = async () => {
         message.error(t('toMailEmpty'))
         return
     }
-    if (!hasSendMailContent(content, sendMailModel.value.contentType)) {
+    if (!hasSendMailContent(content, sendMailModel.value.contentType)
+        || (props.reply && content.trim() === props.initialDraft.content.trim())) {
         message.error(t('contentEmpty'))
         return
     }
@@ -105,6 +156,11 @@ const send = async () => {
         subject,
         is_html: sendMailModel.value.contentType != 'text',
         content,
+        reply_mail_id: props.reply ? sendMailModel.value.replyMailId : undefined,
+        ...(sendMailModel.value.inReplyTo ? {
+            in_reply_to: sendMailModel.value.inReplyTo,
+            references: sendMailModel.value.references,
+        } : {}),
     }
 
     sending.value = true
@@ -114,17 +170,11 @@ const send = async () => {
                 method: 'POST',
                 body: JSON.stringify(payload)
             })
-        sendMailModel.value = {
-            fromName: "",
-            fromMail: "",
-            toName: "",
-            toMail: "",
-            subject: "",
-            contentType: 'text',
-            content: "",
-        }
+        sendMailModel.value = { ...emptyDraft }
+        useInitialDefault.value = !embedded
         isPreview.value = false
         message.success(t("successSend"));
+        emit('sent')
     } catch (error) {
         message.error(error.message || "error");
     } finally {
@@ -156,26 +206,24 @@ onBeforeUnmount(() => {
 
 const handleCreated = (editor) => {
     editorRef.value = editor;
+    if (embedded) editor.focus()
+}
+
+const focusReplyStart = (event) => {
+    if (props.reply) event.target.setSelectionRange(0, 0)
 }
 </script>
 
 <template>
-    <div class="composer-page">
-        <n-card class="composer-card" :bordered="false" embedded>
-            <template #header>
-                <div class="composer-title">
-                    <h2>{{ t('composeMail') }}</h2>
-                    <n-text depth="3">{{ t('adminComposeTip') }}</n-text>
-                </div>
-            </template>
-
-            <n-form class="composer-form" :model="sendMailModel" label-placement="top">
+    <div class="composer-page" :class="{ 'composer-page--embedded': embedded }">
+        <div class="composer-body">
+            <n-form class="composer-form" :model="sendMailModel" label-placement="top" :show-feedback="false">
                 <n-grid cols="1 m:2" responsive="screen" :x-gap="16">
                     <n-grid-item>
                         <n-form-item :label="t('senderAddress')" required
                             :label-props="{ for: 'admin-send-mail-sender-address' }">
-                            <n-input v-model:value="sendMailModel.fromMail"
-                                :input-props="{ id: 'admin-send-mail-sender-address' }" />
+                            <AdminSenderPicker v-model="selectedSender" input-id="admin-send-mail-sender-address"
+                                :disabled="sending" @default-address="receiveDefaultSender" />
                         </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
@@ -189,7 +237,7 @@ const handleCreated = (editor) => {
                         <n-form-item :label="t('recipientAddress')" required
                             :label-props="{ for: 'admin-send-mail-recipient-address' }">
                             <n-input v-model:value="sendMailModel.toMail"
-                                :input-props="{ id: 'admin-send-mail-recipient-address' }" />
+                                :input-props="{ id: 'admin-send-mail-recipient-address', inputmode: 'email' }" />
                         </n-form-item>
                     </n-grid-item>
                     <n-grid-item>
@@ -234,65 +282,66 @@ const handleCreated = (editor) => {
                     </div>
                     <n-input v-else class="compose-textarea" type="textarea" :bordered="false"
                         v-model:value="sendMailModel.content" :placeholder="t('contentPlaceholder')"
-                        :input-props="{ 'aria-label': t('content') }"
-                        :autosize="{ minRows: 14, maxRows: 24 }" />
+                        :input-props="{ 'aria-label': t('content') }" :autofocus="embedded"
+                        @focus.once="focusReplyStart"
+                        :autosize="{ minRows: 12, maxRows: 24 }" />
                 </div>
 
                 <div class="composer-actions">
-                    <n-text depth="3" class="draft-status">{{ t('draftSaved') }}</n-text>
+                    <n-text v-if="!embedded" depth="3" class="draft-status">{{ t('draftSaved') }}</n-text>
+                    <ReplyDraftAI v-if="reply && replySource" :source="replySource" scope="admin"
+                        :disabled="sending" @apply="applyAIReply" />
+                    <DraftTranslation v-model:draft="sendMailModel" scope="admin"
+                        :reply="reply" :disabled="sending" @applied="isPreview = false" />
                     <n-button type="primary" :loading="sending" :disabled="sending" @click="send">
                         <template #icon><n-icon :component="SendRound" /></template>
                         {{ t('send') }}
                     </n-button>
                 </div>
             </n-form>
-        </n-card>
+        </div>
     </div>
 </template>
 
 <style scoped>
 .composer-page {
     width: 100%;
-    padding: 14px 0 24px;
-    text-align: left;
+    text-align: start;
 }
 
-.composer-card {
-    width: min(900px, 100%);
-    margin: 0 auto;
+.composer-body {
+    width: min(100%, 53rem);
+    padding-block: 4px 16px;
 }
 
-.composer-title {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 8px 12px;
+.composer-page--embedded .composer-body {
+    padding: clamp(14px, 4vw, 22px);
 }
 
-.composer-title > h2 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
+.composer-form {
+    display: grid;
+    gap: 12px;
 }
 
-.composer-title .n-text {
-    font-size: 13px;
+.composer-form .n-grid {
+    row-gap: 12px;
 }
 
 .editor-panel {
     overflow: hidden;
-    border: 1px solid rgba(128, 128, 128, 0.24);
-    border-radius: 3px;
+    border: 1px solid var(--mail-border);
+    border-radius: 8px;
 }
 
 .editor-panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    min-height: 46px;
-    padding: 6px 10px 6px 14px;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    gap: 8px;
+    min-height: 39px;
+    padding: 4px 8px 4px 12px;
+    border-bottom: 1px solid var(--mail-border);
+    background: var(--mail-hover);
 }
 
 .editor-controls {
@@ -320,11 +369,15 @@ const handleCreated = (editor) => {
 }
 
 .rich-editor {
-    background: #fff;
+    color: var(--mail-ink);
+    --w-e-textarea-bg-color: var(--mail-surface);
+    --w-e-textarea-color: var(--mail-ink);
+    --w-e-toolbar-bg-color: var(--mail-surface);
+    --w-e-toolbar-color: var(--mail-muted);
 }
 
 .rich-editor :deep(.w-e-toolbar) {
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--mail-border);
 }
 
 .rich-editor :deep(.w-e-text-container),
@@ -345,22 +398,17 @@ const handleCreated = (editor) => {
 .composer-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(128, 128, 128, 0.18);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 4px;
 }
 
 .draft-status {
-    font-size: 13px;
+    margin-inline-end: auto;
 }
 
 @media (max-width: 640px) {
-    .composer-page {
-        padding-top: 8px;
-    }
-
     .editor-panel-header {
         align-items: flex-start;
         flex-wrap: wrap;

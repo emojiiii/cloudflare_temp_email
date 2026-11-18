@@ -1,10 +1,8 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue';
 import { useScopedI18n } from '@/i18n/app'
-import { CleaningServicesFilled } from '@vicons/material'
 
 import { api } from '../../api'
-import { init } from 'vooks/lib/on-fonts-ready';
 
 const message = useMessage()
 const D1_STORAGE_PLAN_CONFIG_KEY = 'd1_storage_plan'
@@ -18,6 +16,9 @@ const dbVersionData = ref({
 const selectedPlan = ref(null)
 const savedPlan = ref(null)
 const savingPlan = ref(false)
+const fetching = ref(false)
+const schemaAction = ref('')
+const loaded = ref(false)
 
 const planOptions = computed(() => [
     {
@@ -62,10 +63,11 @@ const formatBytes = (bytes) => {
 }
 
 const fetchData = async () => {
+    fetching.value = true
     try {
         const [versionRes, configRes] = await Promise.all([
-            api.fetch('/admin/db_version'),
-            api.fetch(`/admin/config/${D1_STORAGE_PLAN_CONFIG_KEY}`)
+            api.fetch('/admin/db_version', { showLoading: false }),
+            api.fetch(`/admin/config/${D1_STORAGE_PLAN_CONFIG_KEY}`, { showLoading: false })
         ]);
         if (versionRes) Object.assign(dbVersionData.value, versionRes);
 
@@ -74,8 +76,11 @@ const fetchData = async () => {
             selectedPlan.value = configuredPlan
             savedPlan.value = configuredPlan
         }
+        loaded.value = true
     } catch (error) {
         message.error(error.message || "error");
+    } finally {
+        fetching.value = false
     }
 }
 
@@ -84,7 +89,8 @@ const savePlan = async (plan) => {
     try {
         await api.fetch('/admin/config', {
             method: 'POST',
-            body: { key: D1_STORAGE_PLAN_CONFIG_KEY, value: plan }
+            body: { key: D1_STORAGE_PLAN_CONFIG_KEY, value: plan },
+            showLoading: false,
         })
         savedPlan.value = plan
         message.success(t('planSaved'))
@@ -96,188 +102,156 @@ const savePlan = async (plan) => {
     }
 }
 
-const initialization = async () => {
+const updateDatabase = async (operation) => {
+    schemaAction.value = operation
     try {
-        await api.fetch('/admin/db_initialize', {
-            method: 'POST'
+        await api.fetch(`/admin/db_${operation}`, {
+            method: 'POST',
+            showLoading: false,
         });
         await fetchData();
-        message.success(t('initializationSuccess'));
+        message.success(t(operation === 'initialize' ? 'initializationSuccess' : 'migrationSuccess'));
     } catch (error) {
         message.error(error.message || "error");
+    } finally {
+        schemaAction.value = ''
     }
 }
 
-const migration = async () => {
-    try {
-        await api.fetch('/admin/db_migration', {
-            method: 'POST'
-        });
-        await fetchData();
-        message.success(t('migrationSuccess'));
-    } catch (error) {
-        message.error(error.message || "error");
-    }
-}
-
-onMounted(async () => {
-    await fetchData();
-})
+onMounted(fetchData)
 </script>
 
 
 <template>
-    <div class="center">
-        <n-card :bordered="false" embedded>
-            <n-alert v-if="dbVersionData.need_initialization" type="warning" :show-icon="false" :bordered="false">
-                <span>{{ t('need_initialization_tip') }}</span>
-                <n-button @click="initialization" type="primary" secondary block :loading="loading">
-                    {{ t('init') }}
-                </n-button>
-            </n-alert>
-            <n-alert v-if="dbVersionData.need_migration" type="warning" :show-icon="false" :bordered="false">
-                <span>{{ t('need_migration_tip') }}</span>
-                <n-button @click="migration" type="primary" secondary block :loading="loading">
-                    {{ t('migration') }}
-                </n-button>
-            </n-alert>
-            <n-alert type="info" :show-icon="false" :bordered="false">
-                <span>
-                    {{ t('current_db_version') }}: {{ dbVersionData.current_db_version || "unknown" }},
-                    {{ t('code_db_version') }}: {{ dbVersionData.code_db_version }}
-                </span>
-            </n-alert>
-
-            <div class="storage-panel">
-                <div class="storage-heading">
-                    <div>
-                        <h3>{{ t('storage_title') }}</h3>
-                        <p>{{ t('storage_description') }}</p>
-                    </div>
-                    <div class="plan-select">
-                        <span>{{ t('plan') }}</span>
-                        <n-select
-                            v-model:value="selectedPlan"
-                            :options="planOptions"
-                            :placeholder="t('plan_placeholder')"
-                            :disabled="dbVersionData.need_initialization"
-                            :loading="savingPlan"
-                            @update:value="savePlan"
-                        />
-                    </div>
-                </div>
-
-                <n-grid cols="1 s:2" responsive="screen" :x-gap="12" :y-gap="12">
-                    <n-grid-item>
-                        <div class="storage-stat">
-                            <span>{{ t('current_database_size') }}</span>
-                            <strong>{{ formatBytes(dbVersionData.database_size) }}</strong>
-                        </div>
-                    </n-grid-item>
-                    <n-grid-item>
-                        <div class="storage-stat">
-                            <span>{{ t('single_database_limit') }}</span>
-                            <strong>{{ selectedPlanDetails ? formatBytes(selectedPlanDetails.databaseLimit) : '—' }}</strong>
-                        </div>
-                    </n-grid-item>
-                </n-grid>
-
-                <div v-if="selectedPlanDetails" class="storage-progress">
-                    <div class="storage-progress-label">
-                        <span>{{ t('storage_usage') }}</span>
-                        <span>{{ storagePercentage.toFixed(2) }}%</span>
-                    </div>
-                    <n-progress
-                        type="line"
-                        :percentage="progressPercentage"
-                        :status="progressStatus"
-                        :show-indicator="false"
-                    />
-                </div>
-
-                <n-alert class="storage-tip" type="default" :show-icon="false" :bordered="false">
-                    {{ t('storage_tip') }}
-                </n-alert>
+    <div class="database-settings" :aria-busy="fetching || !!schemaAction">
+        <section class="workspace-panel database-card" :aria-label="t('schema')">
+            <div class="database-heading">
+                <h2>{{ t('schema') }}</h2>
+                <n-tag v-if="loaded" size="small" :bordered="false"
+                    :type="dbVersionData.need_initialization || dbVersionData.need_migration ? 'warning' : 'success'">
+                    {{ t(dbVersionData.need_initialization ? 'initializationRequired'
+                        : dbVersionData.need_migration ? 'migrationRequired' : 'schemaReady') }}
+                </n-tag>
             </div>
-
-        </n-card>
+            <n-skeleton v-if="!loaded && fetching" text :repeat="2" />
+            <dl v-else class="database-versions">
+                <div>
+                    <dt>{{ t('current_db_version') }}</dt>
+                    <dd>{{ dbVersionData.current_db_version || t('unavailable') }}</dd>
+                </div>
+                <div>
+                    <dt>{{ t('code_db_version') }}</dt>
+                    <dd>{{ dbVersionData.code_db_version || t('unavailable') }}</dd>
+                </div>
+            </dl>
+            <div v-if="dbVersionData.need_initialization || dbVersionData.need_migration" class="database-action">
+                <n-button v-if="dbVersionData.need_initialization" type="primary" :disabled="fetching || !!schemaAction"
+                    :loading="schemaAction === 'initialize'" @click="updateDatabase('initialize')">{{ t('init') }}</n-button>
+                <n-button v-else type="primary" :disabled="fetching || !!schemaAction"
+                    :loading="schemaAction === 'migration'" @click="updateDatabase('migration')">{{ t('migration') }}</n-button>
+            </div>
+        </section>
+        <section class="workspace-panel database-card storage-panel" :aria-label="t('storage_title')">
+            <div class="database-heading">
+                <h2>{{ t('storage_title') }}</h2>
+                <div class="plan-select">
+                    <span>{{ t('plan') }}</span>
+                    <n-select v-model:value="selectedPlan" :options="planOptions" :placeholder="t('plan_placeholder')"
+                        :disabled="!loaded || savingPlan || !!schemaAction || dbVersionData.need_initialization"
+                        :loading="savingPlan" :input-props="{ 'aria-label': t('plan') }" @update:value="savePlan" />
+                </div>
+            </div>
+            <div class="storage-stats">
+                <div class="storage-stat">
+                    <span>{{ t('current_database_size') }}</span>
+                    <strong>{{ formatBytes(dbVersionData.database_size) }}</strong>
+                </div>
+                <div class="storage-stat">
+                    <span>{{ t('single_database_limit') }}</span>
+                    <strong>{{ selectedPlanDetails ? formatBytes(selectedPlanDetails.databaseLimit) : '—' }}</strong>
+                </div>
+            </div>
+            <div v-if="selectedPlanDetails && dbVersionData.database_size !== null" class="storage-progress">
+                <div class="storage-progress-label">
+                    <span>{{ t('storage_usage') }}</span>
+                    <span>{{ storagePercentage.toFixed(2) }}%</span>
+                </div>
+                <n-progress type="line" :percentage="progressPercentage" :status="progressStatus" :show-indicator="false" />
+            </div>
+        </section>
     </div>
 </template>
 
 <style scoped>
-.n-card {
-    max-width: 800px;
+.database-settings {
+    display: grid;
+    gap: 14px;
+    width: min(100%, 820px);
 }
 
-.n-alert {
-    margin-bottom: 10px;
+.database-card {
+    padding: clamp(14px, 2.5vw, 22px);
 }
 
-.center {
+.database-heading {
     display: flex;
-    text-align: center;
-    place-items: center;
-    justify-content: center;
-}
-
-.n-button {
-    margin-top: 10px;
-}
-
-.storage-panel {
-    margin-top: 18px;
-    padding-top: 18px;
-    border-top: 1px solid var(--n-border-color);
-    text-align: left;
-}
-
-.storage-heading {
-    display: flex;
-    gap: 24px;
-    align-items: flex-end;
+    flex-wrap: wrap;
     justify-content: space-between;
+    align-items: center;
+    gap: 10px 18px;
     margin-bottom: 16px;
 }
 
-.storage-heading h3,
-.storage-heading p {
+.database-card h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.database-versions,
+.storage-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
     margin: 0;
 }
 
-.storage-heading p {
-    margin-top: 4px;
-    color: var(--n-text-color-3);
+.database-versions dt,
+.plan-select > span,
+.storage-stat span,
+.storage-progress-label {
+    color: var(--mail-muted);
+    font-size: 13px;
+}
+
+.database-versions dd {
+    margin: 4px 0 0;
+    font-weight: 600;
+}
+
+.database-action {
+    margin-top: 16px;
 }
 
 .plan-select {
-    width: 220px;
+    width: min(100%, 225px);
 }
 
 .plan-select > span {
     display: block;
     margin-bottom: 6px;
-    color: var(--n-text-color-2);
 }
 
 .storage-stat {
-    display: flex;
-    min-height: 72px;
-    padding: 14px;
-    box-sizing: border-box;
-    flex-direction: column;
-    justify-content: space-between;
-    border: 1px solid var(--n-border-color);
-    border-radius: var(--n-border-radius);
-}
-
-.storage-stat span {
-    color: var(--n-text-color-3);
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 12px;
+    border-radius: 9px;
+    background: var(--mail-bg);
 }
 
 .storage-stat strong {
-    margin-top: 8px;
     font-size: 18px;
-    color: var(--n-text-color);
 }
 
 .storage-progress {
@@ -288,23 +262,11 @@ onMounted(async () => {
     display: flex;
     justify-content: space-between;
     margin-bottom: 6px;
-    color: var(--n-text-color-2);
 }
 
-.storage-tip {
-    margin-top: 16px;
-    margin-bottom: 0;
-}
-
-@media (max-width: 640px) {
-    .storage-heading {
-        align-items: stretch;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .plan-select {
-        width: 100%;
+@media (max-width: 400px) {
+    .storage-stats {
+        grid-template-columns: 1fr;
     }
 }
 </style>

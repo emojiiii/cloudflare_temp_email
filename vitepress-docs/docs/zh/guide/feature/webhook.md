@@ -14,9 +14,9 @@
 - 可以使用 [msgpusher.com](https://msgpusher.com) 提供的服务
 - 也可以自建 `message-pusher` 服务，参考 [songquanpeng/message-pusher](https://github.com/songquanpeng/message-pusher)
 
-## admin 配置全局 webhook
+## 管理员配置邮件 Webhook
 
-![telegram](/feature/admin-mail-webhook.png)
+打开「设置 → 邮件 Webhook」。Worker 已开启功能时，页面会显示接收地址的配置状态。填写接收服务的 URL 后，可以先关闭推送开关保存草稿配置，准备好后再启用并保存。全局 Webhook 可推送符合已保存过滤规则的来信。
 
 ## admin 允许邮箱使用 webhook
 

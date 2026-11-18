@@ -3,6 +3,7 @@ import { Context } from "hono";
 import { handleListQuery } from "../common";
 import i18n from "../i18n";
 import { sendMail } from "../mails_api/send_mail_api";
+import { sendboxDeliveryJoin, sendboxFields } from '../mails_api/resend_delivery';
 import {
     getSendBalanceState,
     requestSendMailAccess,
@@ -32,10 +33,11 @@ const settings = async (c: Context<HonoCustomType>): Promise<Response> => {
     if (address instanceof Response) {
         return address;
     }
-    const { balance } = await getSendBalanceState(c, address);
+    const { balance, isNoLimitSender } = await getSendBalanceState(c, address);
     return c.json({
         address,
         send_balance: balance || 0,
+        send_unlimited: isNoLimitSender,
     });
 }
 
@@ -81,11 +83,11 @@ const listUserSendbox = async (c: Context<HonoCustomType>): Promise<Response> =>
     }
     const fromQuery = ` FROM users_address ua`
         + ` JOIN address a ON a.id = ua.address_id`
-        + ` JOIN sendbox sb ON sb.address = a.name`
-        + ` WHERE ${filters.join(" AND ")}`;
+        + ` JOIN sendbox sb ON sb.address = a.name`;
+    const whereQuery = ` WHERE ${filters.join(" AND ")}`;
     return await handleListQuery(c,
-        `SELECT sb.*${fromQuery}`,
-        `SELECT count(*) as count${fromQuery}`,
+        `SELECT ${sendboxFields}${fromQuery}${sendboxDeliveryJoin}${whereQuery}`,
+        `SELECT count(*) as count${fromQuery}${whereQuery}`,
         params, limit, offset, "sb.id desc"
     );
 }

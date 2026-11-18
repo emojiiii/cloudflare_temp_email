@@ -63,7 +63,8 @@ const createNewAddress = async (c: Context<HonoCustomType>) => {
             enableRandomSubdomain: getBooleanValue(enableRandomSubdomain),
             checkLengthByConfig: true,
             addressPrefix,
-            sourceMeta
+            sourceMeta,
+            protectSavedMail: getBooleanValue(c.env.RECEIVE_ONLY_USERS),
         });
         return c.json(res);
     } catch (e) {

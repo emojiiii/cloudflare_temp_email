@@ -91,12 +91,54 @@ The same user-address API group also provides:
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/user_api/address/:address_id/settings` | Get the address and remaining send balance |
+| `GET` | `/user_api/address/:address_id/settings` | Get the address, remaining send balance, and `send_unlimited` |
 | `POST` | `/user_api/address/:address_id/request_send_mail_access` | Request send access for the address |
 | `GET` | `/user_api/sendbox?limit=20&offset=0&address=optional-address` | List the current user's sent items, optionally filtered by a bound address |
 | `DELETE` | `/user_api/sendbox/:mail_id` | Delete one sent item owned by the current user |
 
 All endpoints require a User JWT. Address-scoped endpoints verify that `address_id` is bound to the current user, while user-level sent-item endpoints only return or delete records for the user's bound addresses. The user access token is only used to apply optional role permissions.
+
+### Administrator sender selection
+
+`GET /admin/send_mail/options` uses the same administrator authentication as `POST /admin/send_mail`. It returns `domains`, the configured domains with an available sending provider, and `addresses`, up to 20 existing addresses on those domains. The optional `query` parameter searches addresses by case-insensitive substring.
+
+In the administrator composer, choose an existing address or enter an address prefix and select a sending domain. Favorites and the default sender follow the administrator account across browsers. New drafts start with the default, and replies start with the original receiving address.
+
+`GET /admin/send_mail/preferences` returns the current account's `addresses` and `defaultAddress`. When no default is set, `defaultAddress` is `null`.
+
+`PATCH /admin/send_mail/preferences` accepts a full sender `address` and one of the following values for `action`. It returns the updated preferences.
+
+- `add` adds a favorite sender address.
+- `remove` removes a favorite and clears the default if that address was selected as default.
+- `set-default` adds the address to favorites and makes it the default.
+
+Both endpoints require an administrator password or a valid administrator role token. Each role account has its own preferences. To upgrade an existing D1 database, run the migration in the admin console or apply `db/2026-11-18-admin-sender-preferences.sql`.
+
+## Reply to a message
+
+Open a message in the mailbox, user center, or admin console and select **Reply**. The composer uses the original `Reply-To` address when available and falls back to `From`. It prefixes the subject with `Re:` and starts with a blank body. The reply includes conversation headers when the original has a valid Message-ID.
+
+The HTTP endpoints above and `POST /admin/send_mail` accept these optional fields.
+
+| Field | Format |
+| --- | --- |
+| `reply_mail_id` | The numeric ID of the original message in the sending mailbox, used to mark it as replied |
+| `in_reply_to` | Message-ID of the original mail, for example `"<original@example.com>"` |
+| `references` | Array of Message-IDs from the original `References` header, oldest first |
+
+The server appends `in_reply_to` to `References`. Omit these fields when composing a new email. A successfully submitted reply is marked `is_replied: 1` on the original message in the list.
+
+Sent records include `send_status`. `accepted` means the provider accepted the submission, `failed` means the submission failed, and `unknown` means the result could not be confirmed. Apply `db/2026-11-18-mail-send-status.sql` when upgrading an existing database.
+
+## Resend provider keys
+
+Sign in with the administrator password and use **Settings → Provider keys** to update the Resend key for each domain. Updates take effect immediately. Alternatively, call `GET /admin/provider_credentials` for configuration status, `PUT /admin/provider_credentials/resend/:domain` with `{"apiKey":"..."}` to save a key, or `DELETE` to remove it. Use the same methods on `/admin/provider_credentials/deepseek` to manage the administrator DeepSeek key. Call `POST /admin/provider_credentials/migrate` to migrate legacy secrets. Complete [provider key storage setup](/en/guide/worker-vars#provider-keys-and-receive-only-mode) first.
+
+## Resend delivery status
+
+Apply `db/2026-11-18-resend-delivery.sql`. In [Resend Webhooks](https://resend.com/webhooks), add `https://<mail-site>/open_api/resend_webhook` and subscribe to `email.delivered`, `email.bounced`, `email.failed`, `email.delivery_delayed`, `email.suppressed`, and `email.complained`. Store the signing secret as the Worker Secret `RESEND_WEBHOOK_SECRET`. Sending domains within the same Resend account share the endpoint.
+
+Sent mail matches delivery events by Resend email ID. `delivery_status` shows the delivery outcome, `delivery_updated_at` contains the event time, and `delivery_reason` contains the provider's reason when available. Delivered means the recipient's mail server accepted the message. Historical messages without a saved Resend email ID continue to show their submission status. [Resend delivery event](https://resend.com/docs/webhooks/emails/delivered)
 
 ## Send Email via SMTP
 

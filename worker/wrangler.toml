@@ -1,0 +1,57 @@
+name = "kitt-temp-email"
+main = "src/worker.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+keep_vars = true
+# Store runtime secrets in the Worker settings.
+workers_dev = true
+preview_urls = false
+# Catch-all rules for kitt.tools and clifzo.com are managed in Cloudflare Email Routing.
+
+[[routes]]
+pattern = "mail.kitt.tools"
+custom_domain = true
+
+[[send_email]]
+name = "SEND_MAIL"
+
+[assets]
+directory = "../frontend/dist/"
+binding = "ASSETS"
+run_worker_first = true
+
+[vars]
+ENABLE_WEBHOOK = true
+RECEIVE_ONLY_USERS = true
+DEFAULT_LANG = "zh"
+TITLE = "Clifzo Mail"
+PREFIX = ""
+DEFAULT_DOMAINS = ["kitt.tools", "clifzo.com"]
+DOMAINS = ["kitt.tools", "clifzo.com"]
+SEND_MAIL_DOMAINS = ["kitt.tools"]
+DEFAULT_SEND_BALANCE = 0
+ENABLE_USER_CREATE_EMAIL = true
+DISABLE_ANONYMOUS_USER_CREATE_EMAIL = true
+ENABLE_USER_DELETE_EMAIL = true
+ENABLE_ADDRESS_PASSWORD = true
+ADDRESS_PASSWORD_LOGIN_ONLY = true
+ENABLE_MAIL_READ_STATUS = true
+ENABLE_AUTO_REPLY = false
+ENABLE_MAIL_TRANSLATION = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kitt-temp-email-db"
+database_id = "62aa50f3-de28-439d-bab0-3683872eb7d0"
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "628170311"
+
+[ratelimits.simple]
+limit = 20
+period = 60
+
+[[kv_namespaces]]
+binding = "KV"
+id = "1cc8bd0aac5442f9a06ab704956faa8c"

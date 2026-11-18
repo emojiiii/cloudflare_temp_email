@@ -1,4 +1,55 @@
 export const MESSAGE_REGISTRY = {
+  "components.ProviderCredentials": {
+    "storageRequired": { "en": "Set CREDENTIALS_ENCRYPTION_KEY in the Worker to manage API keys here.", "zh": "在 Worker 配置 CREDENTIALS_ENCRYPTION_KEY 后即可在此管理 API Key。" },
+    "configure": { "en": "Configure", "zh": "配置" },
+    "replace": { "en": "Replace", "zh": "更换" },
+    "configureNamed": { "en": "Configure {name} key", "zh": "配置 {name} 密钥" },
+    "replaceNamed": { "en": "Replace {name} key", "zh": "更换 {name} 密钥" },
+    "cancel": { "en": "Cancel", "zh": "取消" },
+    "adminDeepSeek": { "en": "Translation and AI reply drafts for administrators.", "zh": "管理员翻译和 AI 起草使用此 Key。" },
+    "personalDeepSeek": { "en": "Use your own key to translate incoming mail.", "zh": "用你自己的 Key 翻译收到的邮件。" },
+    "resendDomains": { "en": "Set the sending API key for each email domain.", "zh": "为每个发信域名设置 API Key。" },
+    "migration": { "en": "Existing provider keys", "zh": "现有服务密钥" },
+    "migrationDescription": { "en": "Move the Worker’s existing provider keys into encrypted settings.", "zh": "把 Worker 中的 API Key 加密迁入设置。" },
+    "migrate": { "en": "Migrate existing keys", "zh": "迁移现有密钥" },
+    "migrated": { "en": "Existing keys migrated", "zh": "现有密钥已迁移" },
+    "configured": { "en": "Configured", "zh": "已配置" },
+    "unconfigured": { "en": "Not configured", "zh": "未配置" },
+    "newKey": { "en": "Enter a new API key", "zh": "输入新的 API Key" },
+    "save": { "en": "Save", "zh": "保存" },
+    "saved": { "en": "Settings saved", "zh": "设置已保存" },
+    "remove": { "en": "Remove", "zh": "清除" },
+    "confirmRemove": { "en": "Remove the saved key for {name}?", "zh": "清除 {name} 已保存的密钥？" },
+    "loadFailed": { "en": "Could not load service settings.", "zh": "服务设置加载失败。" },
+    "saveFailed": { "en": "Could not update the API key.", "zh": "更新 API Key 失败。" },
+    "retry": { "en": "Retry", "zh": "重试" },
+  },
+  "components.ReplyDraftAI": {
+    "title": { "en": "Draft with AI", "zh": "AI 起草" },
+    "intent": { "en": "Reply notes (optional)", "zh": "回复要点（选填）" },
+    "intentPlaceholder": { "en": "Leave blank to draft from the incoming email.", "zh": "留空可直接根据来信起草" },
+    "targetLanguage": { "en": "Reply language", "zh": "回信语言" },
+    "followOriginalLanguage": { "en": "Same as incoming email", "zh": "跟随来信语言" },
+    "providerNotice": { "en": "Generating sends the incoming subject, body, and any notes to DeepSeek.", "zh": "生成时会将来信的主题、正文和已填的要点发送给 DeepSeek。" },
+    "truncatedNotice": { "en": "This email is long. The draft will use its opening text.", "zh": "来信较长，生成时会使用开头部分。" },
+    "generate": { "en": "Generate draft", "zh": "生成草稿" },
+    "regenerate": { "en": "Generate again", "zh": "重新生成" },
+    "preview": { "en": "Draft preview", "zh": "草稿预览" },
+    "original": { "en": "Reply text", "zh": "回信原文" },
+    "chineseTranslation": { "en": "Chinese translation", "zh": "中文译文" },
+    "apply": { "en": "Insert draft", "zh": "插入草稿" },
+    "failed": { "en": "Could not generate a draft. Try again.", "zh": "生成草稿失败，请重试。" },
+  },
+  "components.DraftTranslation": {
+    "translate": { "en": "Translate draft", "zh": "翻译草稿" },
+    "targetLanguage": { "en": "Target language", "zh": "目标语言" },
+    "providerNotice": { "en": "Previewing sends draft text to {provider}.", "zh": "预览译文会将草稿文字发送给 {provider}。" },
+    "preview": { "en": "Translation preview", "zh": "译文预览" },
+    "previewTranslation": { "en": "Preview translation", "zh": "预览译文" },
+    "apply": { "en": "Use translation", "zh": "使用译文" },
+    "tooLong": { "en": "The subject or body is over the {max}-character limit.", "zh": "主题或正文超过 {max} 字符的翻译限制。" },
+    "failed": { "en": "Translation failed. Try again.", "zh": "翻译失败，请重试。" },
+  },
   "components.FilterEditor": {
     "hint": { "zh": "未设置条件时全部通过", "en": "No conditions: match everything" },
     "visual": { "zh": "可视化", "en": "Visual" },
@@ -14,8 +65,22 @@ export const MESSAGE_REGISTRY = {
     "value": { "zh": "匹配值", "en": "Value" },
   },
   "components.WebhookComponent": {
+    "delivery": { "zh": "新邮件投递", "en": "Incoming mail delivery" },
+    "destination": { "zh": "投递地址", "en": "Destination" },
+    "missingDestination": { "zh": "未配置接收地址", "en": "No destination configured" },
+    "active": { "zh": "投递已启用", "en": "Delivery enabled" },
+    "paused": { "zh": "投递已暂停", "en": "Delivery paused" },
+    "method": { "zh": "请求方法", "en": "Method" },
+    "requestTemplate": { "zh": "请求模板", "en": "Request template" },
+    "headers": { "zh": "请求头（JSON）", "en": "Headers (JSON)" },
+    "body": { "zh": "请求正文", "en": "Body" },
+    "presetDocs": { "zh": "模板文档", "en": "Preset docs" },
+    "notEnabledAdmin": { "zh": "Worker 尚未开启邮件 Webhook", "en": "Mail Webhooks are disabled on the Worker" },
+    "loadFailed": { "zh": "无法加载 Webhook 设置", "en": "Could not load webhook settings" },
+    "retry": { "zh": "重试", "en": "Retry" },
+    "deliveryTestTip": { "zh": "测试会把所选邮件按当前模板发送到投递地址。", "en": "This test sends the selected email to the destination using the current template." },
     "filter": { "zh": "过滤条件", "en": "Filter" },
-    "filterHelp": { "zh": "可输入 header.List-ID 等字段。文本默认忽略大小写；正则使用 JavaScript 语法，flags 可选 i、m、s。", "en": "Custom headers: e.g. header.List-ID. Text ignores case by default; regex uses JavaScript syntax with optional i, m, s flags." },
+    "filterHelp": { "zh": "不设条件时会投递所有新邮件。可用 header.List-ID 匹配邮件头。", "en": "Leave the filter empty to deliver all incoming messages. Use fields such as header.List-ID to match headers." },
     "filter_from": { "zh": "发件人", "en": "Sender" },
     "filter_to": { "zh": "实际收件邮箱", "en": "Delivery address" },
     "filter_subject": { "zh": "主题", "en": "Subject" },
@@ -71,6 +136,30 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "components.MailBox": {
+    "noMatches": {
+      "en": "No matching messages",
+      "zh": "没有符合条件的邮件"
+    },
+    "loadFailed": {
+      "en": "Could not load messages",
+      "zh": "无法加载邮件"
+    },
+    "selectedCount": {
+      "en": "{count} selected",
+      "zh": "已选 {count} 封"
+    },
+    "selectMail": {
+      "en": "Select {subject}",
+      "zh": "选择邮件 {subject}"
+    },
+    "deleteSelectedTip": {
+      "en": "Delete selected messages ({count})?",
+      "zh": "删除所选的 {count} 封邮件？"
+    },
+    "download": {
+      "en": "Download",
+      "zh": "下载"
+    },
     "attachments": {
       "en": "Show Attachments",
       "zh": "查看附件"
@@ -107,9 +196,13 @@ export const MESSAGE_REGISTRY = {
       "en": "Forward",
       "zh": "转发"
     },
-    "keywordQueryTip": {
-      "en": "Filter current page",
-      "zh": "过滤当前页"
+    "searchInbox": {
+      "en": "Search sender or subject",
+      "zh": "搜索发件人或主题"
+    },
+    "unreadOnly": {
+      "en": "Unread only",
+      "zh": "只看未读"
     },
     "multiAction": {
       "en": "Multi Action",
@@ -202,7 +295,28 @@ export const MESSAGE_REGISTRY = {
       "zh": "订阅链接"
     }
   },
+  "components.MailTranslation": {
+    "translate": { "en": "Translate", "zh": "翻译" },
+    "targetLanguage": { "en": "Target language", "zh": "目标语言" },
+    "providerNotice": {
+      "en": "New translations send the message body to {provider}.",
+      "zh": "生成新译文时会将邮件正文发送给 {provider}。"
+    },
+    "tooLong": {
+      "en": "This message exceeds the {limit}-character translation limit.",
+      "zh": "这封邮件超出 {limit} 字翻译限制。"
+    },
+    "empty": { "en": "This message has no text to translate.", "zh": "这封邮件没有可翻译的正文。" },
+    "translating": { "en": "Translating…", "zh": "正在翻译…" },
+    "failed": { "en": "Translation failed.", "zh": "翻译失败。" },
+    "translation": { "en": "Translation", "zh": "译文" },
+    "original": { "en": "Original", "zh": "原文" },
+    "retry": { "en": "Retry", "zh": "重试" },
+    "showOriginal": { "en": "Show original", "zh": "查看原文" },
+    "showTranslation": { "en": "Show translation", "zh": "查看译文" }
+  },
   "components.MailContentRenderer": {
+    "replied": { "en": "Replied", "zh": "已回复" },
     "from": {
       "en": "From",
       "zh": "发件人"
@@ -288,6 +402,27 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "components.SendBox": {
+    "status": { "en": "Send status", "zh": "发送状态" },
+    "statusAccepted": { "en": "Accepted", "zh": "已提交" },
+    "statusAcceptedDetail": { "en": "The mail service accepted the message for delivery.", "zh": "邮件服务已接受发送请求。" },
+    "statusFailed": { "en": "Failed", "zh": "发送失败" },
+    "statusFailedDetail": { "en": "The mail service rejected the message.", "zh": "邮件服务拒绝了这次发送。" },
+    "statusUnknown": { "en": "Unknown", "zh": "结果未知" },
+    "statusUnknownDetail": { "en": "The mail service did not return a definitive result.", "zh": "邮件服务未返回明确的发送结果。" },
+    "delivered": { "en": "Delivered", "zh": "已送达" },
+    "deliveredDetail": { "en": "The recipient’s mail server accepted the message.", "zh": "收件服务器已接收这封邮件。" },
+    "bounced": { "en": "Bounced", "zh": "退信" },
+    "bouncedDetail": { "en": "The recipient’s mail server returned the message.", "zh": "收件服务器退回了这封邮件。" },
+    "deliveryFailed": { "en": "Delivery failed", "zh": "投递失败" },
+    "deliveryFailedDetail": { "en": "Resend reported a delivery failure.", "zh": "Resend 报告投递失败。" },
+    "delayed": { "en": "Delayed", "zh": "投递延迟" },
+    "delayedDetail": { "en": "Resend reported a delivery delay.", "zh": "Resend 报告投递延迟。" },
+    "suppressed": { "en": "Suppressed", "zh": "已拦截" },
+    "suppressedDetail": { "en": "Resend suppressed the message.", "zh": "这次发送触发了 Resend 的抑制规则。" },
+    "complained": { "en": "Spam complaint", "zh": "被投诉" },
+    "complainedDetail": { "en": "The recipient reported the message as spam.", "zh": "收件人将这封邮件标记为垃圾邮件。" },
+    "deliveryReason": { "en": "Reason", "zh": "原因" },
+    "deliveryUpdated": { "en": "Status updated", "zh": "状态更新" },
     "cancelMultiAction": {
       "en": "Cancel Multi Action",
       "zh": "取消多选"
@@ -490,6 +625,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserMailBox": {
+    "allAddresses": {
+      "en": "All addresses",
+      "zh": "所有邮箱"
+    },
     "addressQueryTip": {
       "en": "Leave blank to query all addresses",
       "zh": "留空查询所有地址"
@@ -614,6 +753,14 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.Header": {
+    "compose": {
+      "en": "Compose",
+      "zh": "写信"
+    },
+    "skipToContent": {
+      "en": "Skip to content",
+      "zh": "跳到正文"
+    },
     "admin": {
       "en": "Admin Console",
       "zh": "管理后台"
@@ -666,6 +813,17 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.Admin": {
+    "settings": { "en": "Settings", "zh": "设置" },
+    "settingsNavigation": { "en": "Settings navigation", "zh": "设置导航" },
+    "settingsSite": { "en": "Site", "zh": "站点" },
+    "settingsIntegrations": { "en": "Integrations", "zh": "集成" },
+    "settingsOperations": { "en": "Operations", "zh": "运维" },
+    "settingsEnabled": { "en": "Enabled", "zh": "已开启" },
+    "settingsDisabled": { "en": "Disabled", "zh": "未开启" },
+    "settingsConfigured": { "en": "Configured", "zh": "已配置" },
+    "settingsNotConfigured": { "en": "Not configured", "zh": "未配置" },
+    "cleanup": { "en": "Cleanup", "zh": "数据清理" },
+    "providers": { "en": "Service keys", "zh": "服务密钥" },
     "about": {
       "en": "About",
       "zh": "关于"
@@ -673,6 +831,10 @@ export const MESSAGE_REGISTRY = {
     "accessHeader": {
       "en": "Admin Password",
       "zh": "管理员密码"
+    },
+    "username": {
+      "en": "Username",
+      "zh": "用户名"
     },
     "accessTip": {
       "en": "Please enter the admin password",
@@ -799,7 +961,7 @@ export const MESSAGE_REGISTRY = {
       "zh": "电报机器人"
     },
     "unknow": {
-      "en": "Mails with unknow receiver",
+      "en": "Unassigned mail",
       "zh": "无收件人邮件"
     },
     "user": {
@@ -1024,6 +1186,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserSendBox": {
+    "replyAddressUnavailable": {
+      "en": "This message’s mailbox is no longer linked.",
+      "zh": "此邮件所属的邮箱已解除绑定。"
+    },
     "noAddress": {
       "en": "Select a bound email address to continue",
       "zh": "请选择一个已绑定的邮箱地址"
@@ -1034,6 +1200,14 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserLogin": {
+    "identifier": {
+      "en": "Email or admin username",
+      "zh": "邮箱或管理员用户名"
+    },
+    "signInRequired": {
+      "en": "Enter your email or admin username and password",
+      "zh": "请输入邮箱或管理员用户名和密码"
+    },
     "cannotForgotPassword": {
       "en": "Mail verification is disabled or register is disabled, cannot reset password, please contact administrator",
       "zh": "未开启邮箱验证或未开启注册功能，无法重置密码，请联系管理员"
@@ -1332,6 +1506,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.index.SendMail": {
+    "sendUnlimited": {
+      "en": "Unlimited sending",
+      "zh": "发信额度不限"
+    },
     "balanceUnavailable": {
       "en": "No send balance for this address",
       "zh": "当前地址暂无发信额度"
@@ -1538,6 +1716,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.index.AddressBar": {
+    "accountLogin": {
+      "en": "Sign in to your account",
+      "zh": "登录账号"
+    },
     "addressCredential": {
       "en": "Mail Address Credential",
       "zh": "邮箱地址凭证"
@@ -1620,6 +1802,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.admin.SendMail": {
+    "addFavorite": {
+      "en": "Add to favorite senders",
+      "zh": "加入常用发件地址"
+    },
     "adminComposeTip": {
       "en": "Send from a configured email address",
       "zh": "使用已配置的邮箱地址发信"
@@ -1648,9 +1834,25 @@ export const MESSAGE_REGISTRY = {
       "en": "Edit",
       "zh": "编辑"
     },
+    "existingSenders": {
+      "en": "Existing mailboxes",
+      "zh": "已有邮箱"
+    },
+    "favoriteSenders": {
+      "en": "Favorite senders",
+      "zh": "常用发件地址"
+    },
+    "defaultSender": {
+      "en": "Default sender",
+      "zh": "默认发件地址"
+    },
     "fromMailEmpty": {
       "en": "Sender address is empty",
       "zh": "发件人地址不能为空"
+    },
+    "fromMailInvalid": {
+      "en": "Enter a valid sender address",
+      "zh": "请输入有效的发件邮箱"
     },
     "fromName": {
       "en": "Your Name and Address, leave Name blank to use email address",
@@ -1660,9 +1862,25 @@ export const MESSAGE_REGISTRY = {
       "en": "HTML",
       "zh": "HTML"
     },
+    "noSenderDomains": {
+      "en": "No sending domains configured",
+      "zh": "没有可发信的域名"
+    },
+    "noSenderMatches": {
+      "en": "No matching sender addresses",
+      "zh": "没有匹配的发件地址"
+    },
     "options": {
       "en": "Options",
       "zh": "选项"
+    },
+    "pickSender": {
+      "en": "Choose or search sender addresses",
+      "zh": "选择或搜索发件地址"
+    },
+    "preferencesLoadFailed": {
+      "en": "Could not load sender preferences",
+      "zh": "无法加载发件偏好"
     },
     "preview": {
       "en": "Preview",
@@ -1676,6 +1894,14 @@ export const MESSAGE_REGISTRY = {
       "en": "Recipient name (optional)",
       "zh": "收件人名称（可选）"
     },
+    "removeFavorite": {
+      "en": "Remove from favorite senders",
+      "zh": "移出常用发件地址"
+    },
+    "retrySenderLoad": {
+      "en": "Retry",
+      "zh": "重试"
+    },
     "rich text": {
       "en": "Rich Text",
       "zh": "富文本"
@@ -1688,9 +1914,25 @@ export const MESSAGE_REGISTRY = {
       "en": "Sender address",
       "zh": "发件邮箱"
     },
+    "senderDomain": {
+      "en": "Sending domain",
+      "zh": "发件域名"
+    },
+    "senderLoadFailed": {
+      "en": "Could not load sender addresses",
+      "zh": "无法加载发件地址"
+    },
     "senderName": {
       "en": "Sender name (optional)",
       "zh": "发件人名称（可选）"
+    },
+    "senderPrefix": {
+      "en": "Address prefix",
+      "zh": "邮箱前缀"
+    },
+    "setDefaultSender": {
+      "en": "Set as default",
+      "zh": "设为默认"
     },
     "subject": {
       "en": "Subject",
@@ -1719,6 +1961,14 @@ export const MESSAGE_REGISTRY = {
     "tooLarge": {
       "en": "Too large file, please upload file less than 1MB.",
       "zh": "文件过大, 请上传小于1MB的文件。"
+    },
+    "useCustomSender": {
+      "en": "Enter address manually",
+      "zh": "手动填写发件地址"
+    },
+    "useSavedSender": {
+      "en": "Choose a sender address",
+      "zh": "选择发件地址"
     }
   },
   "views.admin.Account": {
@@ -1938,6 +2188,8 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.admin.Statistics": {
+    "totalsHeading": { "en": "Overall totals", "zh": "累计概览" },
+    "trendHeading": { "en": "Daily trends", "zh": "每日趋势" },
     "refresh": { "en": "Refresh", "zh": "刷新" },
     "dateRange": { "en": "Time range", "zh": "时间范围" },
     "days7": { "en": "Last 7 days", "zh": "近 7 天" },
@@ -2074,6 +2326,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.admin.DatabaseManager": {
+    "schema": { "en": "Schema", "zh": "数据库结构" },
+    "schemaReady": { "en": "Up to date", "zh": "已就绪" },
+    "initializationRequired": { "en": "Initialization required", "zh": "待初始化" },
+    "migrationRequired": { "en": "Update available", "zh": "待升级" },
     "code_db_version": {
       "en": "Code Needed DB Version",
       "zh": "需要的数据库版本"
@@ -2370,25 +2626,32 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.admin.Telegram": {
+    "configurationRequired": { "en": "Set TELEGRAM_BOT_TOKEN and connect KV in the Worker to enable Telegram.", "zh": "在 Worker 配置 TELEGRAM_BOT_TOKEN 并绑定 KV 后即可启用 Telegram。" },
+    "connection": { "en": "Bot connection", "zh": "机器人连接" },
+    "connected": { "en": "Connected", "zh": "已连接" },
+    "notConfigured": { "en": "Telegram is not configured", "zh": "Telegram 尚未配置" },
+    "notifications": { "en": "Notifications and access", "zh": "通知与访问" },
+    "pendingUpdates": { "en": "{count} pending updates", "zh": "{count} 条待处理更新" },
+    "details": { "en": "Connection details", "zh": "连接详情" },
     "enable": {
       "en": "Enable",
       "zh": "启用"
     },
     "enableGlobalMailPush": {
-      "en": "Enable Global Mail Push(Manually input telegram Chat ID)",
-      "zh": "启用全局邮件推送(手动输入邮箱管理员的 telegram Chat ID, 回车增加)"
+      "en": "Notify on all incoming mail",
+      "zh": "全局收信通知"
     },
     "enableTelegramAllowList": {
-      "en": "Enable Telegram Allow List(Manually input Chat ID)",
-      "zh": "启用 Telegram 白名单(手动输入 Chat ID, 回车增加)"
+      "en": "Restrict access to listed chats",
+      "zh": "限制为白名单内的聊天"
     },
     "globalMailPushList": {
       "en": "Global Mail Push Chat ID List",
       "zh": "全局邮件推送 Chat ID 列表"
     },
     "globalMailPushListTip": {
-      "en": "Support chat_id of private chat/group/channel. You can send a message to your bot, then visit this link to see chat_id, https://api.telegram.org/bot<Replace with your BOT TOKEN>/getUpdates",
-      "zh": "支持对话/群组/频道的 Chat ID, 您可以发送一条消息给您的机器人，然后访问此链接来查看 chat_id, https://api.telegram.org/bot<这里替换成您的 BOT TOKEN>/getUpdates"
+      "en": "Enter the Chat IDs of the conversations, groups, or channels that should receive every incoming mail notification.",
+      "zh": "填写接收全部来信通知的对话、群组或频道 Chat ID。"
     },
     "init": {
       "en": "Init",
@@ -2400,7 +2663,7 @@ export const MESSAGE_REGISTRY = {
     },
     "miniAppUrl": {
       "en": "Telegram Mini App URL",
-      "zh": "电报小程序 URL(请输入你部署的电报小程序网页地址)"
+      "zh": "Telegram 小程序地址"
     },
     "save": {
       "en": "Save",
@@ -2634,7 +2897,15 @@ export const MESSAGE_REGISTRY = {
       "zh": "成功"
     }
   },
+  "views.common.About": {
+    "projectName": { "en": "Cloudflare Temporary Email", "zh": "Cloudflare 临时邮件" },
+    "projectLinks": { "en": "Project links", "zh": "项目链接" }
+  },
   "views.common.Appearance": {
+    "mailLayout": { "en": "Mailbox layout", "zh": "邮件列表" },
+    "reading": { "en": "Reading", "zh": "读信" },
+    "mailTranslation": { "en": "Mail translation", "zh": "邮件翻译" },
+    "mailTranslationLanguage": { "en": "Reading language", "zh": "读信目标语言" },
     "autoLoadRemoteImages": {
       "en": "Automatically load external images in mail body",
       "zh": "自动加载邮件正文中的外部图片"
@@ -2656,8 +2927,8 @@ export const MESSAGE_REGISTRY = {
       "zh": "左侧"
     },
     "mailboxSplitSize": {
-      "en": "Left list width in two-column mailbox view",
-      "zh": "邮箱双栏视图左侧列表宽度占比"
+      "en": "Left column width",
+      "zh": "左侧列表宽度"
     },
     "mailListView": {
       "en": "Full-width mailbox list view",
@@ -2701,6 +2972,9 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.admin.AccountSettings": {
+    "addressRules": { "en": "Address Rules", "zh": "地址规则" },
+    "inboundSettings": { "en": "Receiving", "zh": "收信" },
+    "outboundSettings": { "en": "Sending", "zh": "发信" },
     "actions": {
       "en": "Actions",
       "zh": "操作"
@@ -2906,24 +3180,34 @@ export const MESSAGE_REGISTRY = {
       "zh": "已验证地址列表(可通过 cf 内部 api 发送邮件)"
     }
   },
-  "views.admin.Mails": {
-    "addressQueryTip": {
-      "en": "Leave blank to query all addresses",
-      "zh": "留空查询所有地址"
-    },
-    "query": {
-      "en": "Query",
-      "zh": "查询"
-    }
+  "components.MailboxTabs": {
+    "allMailboxes": { "en": "All mailboxes", "zh": "全部邮箱" },
+    "filterByMailbox": { "en": "Filter by mailbox", "zh": "按邮箱筛选" },
+    "findMailbox": { "en": "Find a mailbox", "zh": "查找邮箱" },
+    "noResults": { "en": "No matching mailboxes", "zh": "没有匹配的邮箱" },
+    "loadFailed": { "en": "Could not load mailboxes", "zh": "无法加载邮箱列表" },
+    "openAddress": { "en": "Open {address}", "zh": "查看 {address}" }
   },
   "views.admin.Maintenance": {
+    "cancel": { "en": "Cancel", "zh": "取消" },
+    "messages": { "en": "Messages", "zh": "邮件" },
+    "addresses": { "en": "Mailboxes", "zh": "邮箱地址" },
+    "days": { "en": "days", "zh": "天" },
+    "retry": { "en": "Retry", "zh": "重试" },
+    "enableRule": { "en": "Automatically clean {rule}", "zh": "自动清理{rule}" },
+    "ruleDays": { "en": "Retention days for {rule}", "zh": "{rule}的保留天数" },
+    "cleanupRule": { "en": "Clean {rule} now", "zh": "立即清理{rule}" },
+    "cleanupConfirm": {
+      "en": "Run the cleanup for {rule} with a {days}-day cutoff? Deleted data cannot be restored.",
+      "zh": "按 {days} 天的阈值清理「{rule}」？删除后无法恢复。"
+    },
     "addCustomSql": {
       "en": "Add Custom SQL",
       "zh": "添加自定义 SQL"
     },
     "addressCreateLabel": {
-      "en": "Cleanup the address created before n days",
-      "zh": "清理 n 天前创建的地址"
+      "en": "Mailboxes by creation date",
+      "zh": "按创建时间清理邮箱"
     },
     "autoCleanup": {
       "en": "Auto cleanup",
@@ -2942,8 +3226,8 @@ export const MESSAGE_REGISTRY = {
       "zh": "清理成功"
     },
     "cronTip": {
-      "en": "Enable cron cleanup, need to configure [crons] in worker, please refer to the document, setting 0 days means clear all",
-      "zh": "启用定时清理, 需在 worker 配置 [crons] 参数, 请参考文档, 配置为 0 天表示全部清空"
+      "en": "Automatic cleanup requires a Worker cron trigger. Setting 0 days makes all matching data eligible.",
+      "zh": "自动清理需要配置 Worker 定时触发器。设为 0 天时，所有符合条件的数据都可被清理。"
     },
     "customSqlCleanup": {
       "en": "Custom SQL Cleanup",
@@ -2958,20 +3242,20 @@ export const MESSAGE_REGISTRY = {
       "zh": "删除"
     },
     "emptyAddressLabel": {
-      "en": "Cleanup the empty address before n days",
-      "zh": "清理 n 天前空邮件的邮箱地址"
+      "en": "Empty mailboxes",
+      "zh": "空邮箱"
     },
     "inactiveAddressLabel": {
-      "en": "Cleanup the inactive address before n days",
-      "zh": "清理 n 天前的未活跃地址"
+      "en": "Inactive mailboxes",
+      "zh": "未活跃邮箱"
     },
     "mailBoxLabel": {
-      "en": "Cleanup the inbox before n days",
-      "zh": "清理 n 天前的收件箱"
+      "en": "All incoming mail",
+      "zh": "全部来信"
     },
     "mailUnknowLabel": {
-      "en": "Cleanup the unknow mail before n days",
-      "zh": "清理 n 天前的无收件人邮件"
+      "en": "Unassigned mail",
+      "zh": "无收件人邮件"
     },
     "save": {
       "en": "Save",
@@ -2982,8 +3266,8 @@ export const MESSAGE_REGISTRY = {
       "zh": "保存成功"
     },
     "sendBoxLabel": {
-      "en": "Cleanup the sendbox before n days",
-      "zh": "清理 n 天前的发件箱"
+      "en": "Sent mail",
+      "zh": "发件记录"
     },
     "sqlName": {
       "en": "Name",
@@ -3006,9 +3290,16 @@ export const MESSAGE_REGISTRY = {
       "zh": "请输入天数"
     },
     "unboundAddressLabel": {
-      "en": "Cleanup the unbound address before n days",
-      "zh": "清理 n 天前的未绑定用户地址"
+      "en": "Unlinked mailboxes",
+      "zh": "未绑定账号的邮箱"
     }
+  },
+  "views.admin.WorkerConfig": {
+    "search": { "en": "Search configuration names", "zh": "搜索配置项名称" },
+    "enabled": { "en": "Enabled", "zh": "已启用" },
+    "disabled": { "en": "Disabled", "zh": "未启用" },
+    "empty": { "en": "No matching configuration", "zh": "没有匹配的配置项" },
+    "retry": { "en": "Retry", "zh": "重试" }
   },
   "views.common.Login": {
     "autoGeneratedName": {
@@ -3110,6 +3401,10 @@ export const MESSAGE_REGISTRY = {
     "pleaseGetNewEmail": {
       "en": "Please login or click \"Get New Email\" button to get a new email address",
       "zh": "请\"登录\"或点击 \"注册新邮箱\" 按钮来获取一个新的邮箱地址"
+    },
+    "signInToCreateMailbox": {
+      "en": "Sign in to your account to create a mailbox.",
+      "zh": "登录账号后即可创建邮箱。"
     },
     "randomSubdomainTip": {
       "en": "When enabled, the created address will use a random subdomain. Recommended for receiving only. Requires a wildcard MX DNS record on the base domain — see the random subdomain docs.",

@@ -7,15 +7,20 @@ import passkey from './passkey';
 import oauth2 from './oauth2';
 import user_mail_api from './user_mail_api';
 import user_send_mail_api from './user_send_mail_api';
+import provider_credentials from './provider_credentials';
 
 export const api = new Hono<HonoCustomType>();
 
 // settings api
 api.get('/user_api/open_settings', settings.openSettings);
 api.get('/user_api/settings', settings.settings);
+api.get('/user_api/provider_credentials', provider_credentials.get);
+api.put('/user_api/provider_credentials/deepseek', provider_credentials.saveDeepSeek);
+api.delete('/user_api/provider_credentials/deepseek', provider_credentials.deleteDeepSeek);
 
 // mail api
 api.get('/user_api/mails', user_mail_api.getMails);
+api.patch('/user_api/mails/:id/read', user_mail_api.updateMailReadStatus);
 api.delete('/user_api/mails/:id', user_mail_api.deleteMail);
 
 // send mail api

@@ -24,7 +24,7 @@ for (const mode of ['default', 'password-only', 'password-disabled']) {
     try {
       await page.setExtraHTTPHeaders(headers);
       await page.goto(`${FRONTEND_URL}/en/`);
-      await page.getByRole('button', { name: 'Create Email Address', exact: true }).click();
+      await page.locator('.n-tabs-tab').getByText('Create Email Address', { exact: true }).click();
       const form = page.locator('.n-tab-pane:visible form');
       await form.locator('.n-input-group .n-input input').fill(`passwordui${Date.now()}`);
       const createdResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/new_address');
@@ -60,7 +60,7 @@ for (const mode of ['default', 'password-only', 'password-disabled']) {
         await expect(expiry).toHaveCount(0);
       }
       await page.keyboard.press('Escape');
-      await page.locator('.n-tabs-tab').getByText('Mailbox Settings', { exact: true }).click();
+      await page.getByRole('link', { name: 'Mailbox Settings', exact: true }).click();
       const showToken = page.getByRole('button', {
         name: passwordOnly ? 'View Session Token' : 'Credentials & Connection Methods', exact: true,
       });

@@ -33,10 +33,6 @@ const panels = computed(() => [
     { metric: 'userCount', title: t('newUsers'), color: theme.value.textColor2 },
     { metric: 'addressCount', title: t('newAddresses'), color: theme.value.infoColor },
 ])
-const colors = computed(() => ({
-    '--text': theme.value.textColor1, '--line': theme.value.borderColor,
-}))
-
 const fetchDashboard = async (params, previousTotals) => {
     const data = await api.fetch(`/admin/statistics?${new URLSearchParams(params)}`, { showLoading: false })
     const counts = Object.entries(data.trends).map(([key, rows]) => [key, new Map(rows.map(row => [row.day, row.count]))])
@@ -89,8 +85,21 @@ watch([from, to, refreshVersion], ([, , version], [, , previousVersion] = []) =>
 </script>
 
 <template>
-    <section class="dashboard" :style="colors" :aria-busy="loading">
+    <section class="dashboard" :aria-busy="loading">
+        <n-alert v-if="loadError" type="error" class="error">{{ loadError }}</n-alert>
+        <section :aria-label="t('totalsHeading')">
+            <h2>{{ t('totalsHeading') }}</h2>
+            <div class="totals">
+                <n-card v-for="key in totalMetrics" :key="key" class="statistic-card" size="small">
+                    <n-statistic :label="t(key)" :value="totals?.[key] != null ? format(totals[key]) : undefined" tabular-nums>
+                        <template v-if="totals?.[key] == null" #default><n-skeleton v-if="loading" height="26px" width="45%" /><span v-else>—</span></template>
+                    </n-statistic>
+                </n-card>
+            </div>
+        </section>
+        <section class="trends" :aria-label="t('trendHeading')">
         <div class="filters">
+            <h2>{{ t('trendHeading') }}</h2>
             <div class="toolbar-actions">
                 <n-popover v-model:show="showTime" trigger="click" placement="bottom-end" :show-arrow="false" :style="{ padding: 0 }">
                     <template #trigger>
@@ -119,38 +128,32 @@ watch([from, to, refreshVersion], ([, , version], [, , previousVersion] = []) =>
                 </n-button>
             </div>
         </div>
-        <n-alert v-if="loadError" type="error" class="error">{{ loadError }}</n-alert>
-        <div class="totals">
-            <n-card v-for="key in totalMetrics" :key="key" size="small">
-                <n-statistic :label="t(key)" :value="totals?.[key] != null ? format(totals[key]) : undefined" tabular-nums>
-                    <template v-if="totals?.[key] == null" #default><n-skeleton v-if="loading" height="30px" width="100px" /><span v-else>—</span></template>
-                </n-statistic>
-            </n-card>
-        </div>
-        <div v-if="loading" class="charts"><n-skeleton v-for="panel in panels" :key="panel.metric" height="322px" /></div>
+        <div v-if="loading" class="charts"><n-skeleton v-for="panel in panels" :key="panel.metric" height="300px" /></div>
         <div v-else-if="!loadError && statistics?.daily.length" class="charts">
             <StatisticsTrend v-for="panel in panels" :key="panel.metric" v-bind="panel" :points="statistics.daily" :group="chartGroup" />
         </div>
+        </section>
     </section>
 </template>
 
 <style scoped>
-.dashboard { color: var(--text); font-variant-numeric: tabular-nums; text-align: left; }
-.filters { padding-bottom: 22px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
-.toolbar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.dashboard { display: grid; gap: 22px; font-variant-numeric: tabular-nums; }
+.dashboard h2 { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
+.filters { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.filters h2 { margin: 0; }
+.toolbar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .time-panel { max-width: calc(100vw - 24px); }
 .time-panel :deep(.n-scrollbar-container) { overscroll-behavior: contain; }
 .quick-ranges { display: flex; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--n-divider-color); }
 .range-help { font-size: 12px; }
-.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.totals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-bottom: 20px; }
-.error { margin-bottom: 20px; }
-@media (max-width: 1024px) {
-    .dashboard { padding-inline: 16px; }
-}
+.charts, .totals { display: grid; gap: 12px; }
+.charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.totals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.statistic-card { min-width: 0; border-color: var(--mail-border); border-radius: var(--mail-radius); background: var(--mail-surface); }
+.statistic-card :deep(.n-statistic__label) { overflow-wrap: anywhere; }
 @media (max-width: 650px) {
-    .charts { grid-template-columns: 1fr; gap: 16px; }
-    .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .charts { grid-template-columns: 1fr; }
+    .totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .time-panel :deep(.n-date-panel--daterange) { grid-template-areas: "left-calendar" "right-calendar" "footer" "action"; }
     .time-panel :deep(.n-date-panel__vertical-divider) { display: none; }
 }

@@ -1,14 +1,26 @@
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit';
 
 import utils from './utils';
 import { CONSTANTS } from './constants';
 import { isS3Enabled } from './mails_api/s3_attachment';
 import { isAnySendMailEnabled } from './common';
 import { getWebhookAttachment } from './open_api/webhook_attachment';
+import { getMailTranslationSettings } from './mails_api/translation';
+import { getAIReplySettings } from './mails_api/ai_reply';
+import { receiveResendDelivery } from './mails_api/resend_delivery';
+import { hasAdminDeepSeekKey } from './provider_credentials';
 
 const api = new Hono<HonoCustomType>
 
+api.post('/open_api/resend_webhook', bodyLimit({
+    maxSize: 64 * 1024,
+    onError: c => c.text('Webhook payload too large', 413),
+}), receiveResendDelivery);
+
 api.get('/open_api/settings', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    const adminDeepSeekConfigured = await hasAdminDeepSeekKey(c);
     // check header x-custom-auth
     let needAuth = false;
     const passwords = utils.getPasswords(c);
@@ -38,6 +50,8 @@ api.get('/open_api/settings', async (c) => {
         "adminContact": c.env.ADMIN_CONTACT,
         "disableUserSystem": utils.getBooleanValue(c.env.DISABLE_USER_SYSTEM),
         "enableUserCreateEmail": utils.getBooleanValue(c.env.ENABLE_USER_CREATE_EMAIL),
+        "receiveOnlyUsers": utils.getBooleanValue(c.env.RECEIVE_ONLY_USERS),
+        "telegramConfigured": Boolean(c.env.TELEGRAM_BOT_TOKEN?.trim() && c.env.KV),
         "disableAnonymousUserCreateEmail": utils.getBooleanValue(c.env.DISABLE_ANONYMOUS_USER_CREATE_EMAIL),
         "disableCustomAddressName": utils.getBooleanValue(c.env.DISABLE_CUSTOM_ADDRESS_NAME),
         "enableUserDeleteEmail": utils.getBooleanValue(c.env.ENABLE_USER_DELETE_EMAIL),
@@ -48,7 +62,9 @@ api.get('/open_api/settings', async (c) => {
         "cfTurnstileSiteKey": c.env.CF_TURNSTILE_SITE_KEY,
         "enableWebhook": utils.getBooleanValue(c.env.ENABLE_WEBHOOK),
         "isS3Enabled": isS3Enabled(c),
-        "enableSendMail": isAnySendMailEnabled(c),
+        "enableSendMail": await isAnySendMailEnabled(c),
+        "translation": getMailTranslationSettings(adminDeepSeekConfigured),
+        "aiReply": getAIReplySettings(adminDeepSeekConfigured),
         "version": CONSTANTS.VERSION,
         "showGithub": !utils.getBooleanValue(c.env.DISABLE_SHOW_GITHUB),
         "showGithubForUser": !utils.getBooleanValue(c.env.DISABLE_SHOW_GITHUB_FOR_USER),

@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS raw_mails (
     raw_blob BLOB,
     metadata TEXT,
     is_unread INTEGER,
+    is_replied INTEGER NOT NULL DEFAULT 0,
+    search_sender TEXT,
+    search_subject TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,6 +28,16 @@ CREATE INDEX IF NOT EXISTS idx_raw_mails_message_id ON raw_mails(message_id);
 CREATE INDEX IF NOT EXISTS idx_raw_mails_cleanup_unknown ON raw_mails(created_at, id, address);
 
 CREATE INDEX IF NOT EXISTS idx_raw_mails_source_domain_created_at ON raw_mails(lower(trim(substr(source, instr(source, '@') + 1), ' <>')), created_at, id);
+
+CREATE TABLE IF NOT EXISTS mail_translations (
+    mail_id INTEGER NOT NULL REFERENCES raw_mails(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL,
+    target_language TEXT NOT NULL,
+    part INTEGER NOT NULL CHECK (part BETWEEN 0 AND 29),
+    digest TEXT NOT NULL,
+    result TEXT NOT NULL,
+    PRIMARY KEY (mail_id, scope, target_language, part)
+);
 
 CREATE TABLE IF NOT EXISTS address (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,11 +83,23 @@ CREATE TABLE IF NOT EXISTS sendbox (
     id INTEGER PRIMARY KEY,
     address TEXT,
     raw TEXT,
+    send_status TEXT NOT NULL DEFAULT 'accepted' CHECK (send_status IN ('accepted', 'failed', 'unknown')),
+    resend_email_id TEXT,
+    resend_rejection_reason TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_sendbox_address ON sendbox(address);
 CREATE INDEX IF NOT EXISTS idx_sendbox_created_at ON sendbox(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sendbox_resend_email_id ON sendbox(resend_email_id) WHERE resend_email_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS resend_delivery (
+    resend_email_id TEXT PRIMARY KEY NOT NULL,
+    delivery_status TEXT NOT NULL,
+    delivery_reason TEXT,
+    delivery_updated_at TEXT NOT NULL,
+    delivery_rank INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -93,6 +118,17 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_user_email ON users(user_email);
+
+CREATE TABLE IF NOT EXISTS provider_credentials (
+    scope TEXT NOT NULL,
+    provider TEXT NOT NULL CHECK (provider IN ('deepseek', 'resend')),
+    identifier TEXT NOT NULL DEFAULT '',
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    encrypted_api_key TEXT NOT NULL,
+    PRIMARY KEY (scope, provider, identifier)
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_credentials_user_id ON provider_credentials (user_id);
 
 CREATE TABLE IF NOT EXISTS users_address (
     id INTEGER PRIMARY KEY,
@@ -145,6 +181,16 @@ CREATE TABLE IF NOT EXISTS redeem_codes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_redeem_codes_type ON redeem_codes(redeem_type);
+
+CREATE TABLE IF NOT EXISTS admin_sender_preferences (
+    owner TEXT NOT NULL,
+    address TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+    PRIMARY KEY (owner, address)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_sender_preferences_default
+    ON admin_sender_preferences (owner) WHERE is_default = 1;
 `
 
 export default {
@@ -225,6 +271,51 @@ export default {
                 await c.env.DB.exec(
                     `ALTER TABLE raw_mails ADD COLUMN is_unread INTEGER;`
                 );
+            }
+        }
+        if (!version || compareVersions(version, 'v0.0.10') <= 0) {
+            const { results } = await c.env.DB.prepare('PRAGMA table_info(raw_mails)').all<{ name: string }>();
+            const columns = new Set(results.map(column => column.name));
+            if (columns.size) {
+                if (!columns.has('search_sender')) await c.env.DB.exec('ALTER TABLE raw_mails ADD COLUMN search_sender TEXT');
+                if (!columns.has('search_subject')) await c.env.DB.exec('ALTER TABLE raw_mails ADD COLUMN search_subject TEXT');
+            }
+        }
+        if (!version || compareVersions(version, 'v0.0.12') <= 0) {
+            const [inboxColumns, sendboxColumns] = await c.env.DB.batch<{ name: string }>([
+                c.env.DB.prepare('PRAGMA table_info(raw_mails)'),
+                c.env.DB.prepare('PRAGMA table_info(sendbox)'),
+            ]);
+            if (inboxColumns.results.length && sendboxColumns.results.length) {
+                const migration: D1PreparedStatement[] = [];
+                if (!inboxColumns.results.some(column => column.name === 'is_replied')) {
+                    migration.push(c.env.DB.prepare('ALTER TABLE raw_mails ADD COLUMN is_replied INTEGER NOT NULL DEFAULT 0'));
+                }
+                if (!sendboxColumns.results.some(column => column.name === 'send_status')) {
+                    migration.push(c.env.DB.prepare(`ALTER TABLE sendbox ADD COLUMN send_status TEXT NOT NULL DEFAULT 'accepted'
+                        CHECK (send_status IN ('accepted', 'failed', 'unknown'))`));
+                }
+                migration.push(c.env.DB.prepare(`WITH replies AS (
+                    SELECT address, json_extract(CASE WHEN json_valid(raw) THEN raw END, '$.in_reply_to') AS message_id
+                    FROM sendbox WHERE send_status = 'accepted'
+                ) UPDATE raw_mails SET is_replied = 1 FROM replies
+                WHERE raw_mails.address = replies.address
+                    AND substr(replies.message_id, 1, 1) = '<' AND substr(replies.message_id, -1) = '>'
+                    AND raw_mails.message_id IN (replies.message_id, substr(replies.message_id, 2, length(replies.message_id) - 2))`));
+                await c.env.DB.batch(migration);
+            }
+        }
+        if (!version || compareVersions(version, 'v0.0.13') <= 0) {
+            const { results } = await c.env.DB.prepare('PRAGMA table_info(sendbox)').all<{ name: string }>();
+            if (results.length) {
+                const migration: D1PreparedStatement[] = [];
+                if (!results.some(column => column.name === 'resend_email_id')) {
+                    migration.push(c.env.DB.prepare('ALTER TABLE sendbox ADD COLUMN resend_email_id TEXT'));
+                }
+                if (!results.some(column => column.name === 'resend_rejection_reason')) {
+                    migration.push(c.env.DB.prepare('ALTER TABLE sendbox ADD COLUMN resend_rejection_reason TEXT'));
+                }
+                if (migration.length) await c.env.DB.batch(migration);
             }
         }
         if (!version || compareVersions(version, CONSTANTS.DB_VERSION) < 0) {

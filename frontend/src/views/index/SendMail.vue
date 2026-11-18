@@ -2,28 +2,43 @@
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import { useScopedI18n } from '@/i18n/app'
-import { computed, onMounted, onBeforeUnmount, ref, shallowRef } from 'vue'
+import { mailboxLocation } from '@/router/workspace-paths'
+import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { SendRound } from '@vicons/material'
 import AdminContact from '../common/AdminContact.vue'
 import ShadowHtmlComponent from '../../components/ShadowHtmlComponent.vue'
+import DraftTranslation from '../../components/DraftTranslation.vue'
+import ReplyDraftAI from '../../components/ReplyDraftAI.vue'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
 import { blockRemoteContent } from '../../utils/remote-content-policy'
 import { sanitizeHtml } from '../../utils/sanitize-html'
+import { insertAIReplyText } from '../../utils/mail-actions'
 
 const message = useMessage()
+const router = useRouter()
 const isPreview = ref(false)
 const editorRef = shallowRef()
+const composerInput = ref(null)
 const sending = ref(false)
-
+defineProps({ replySource: Object })
+const emit = defineEmits(['sent'])
 
 const {
-    settings, sendMailModel, indexTab, userSettings,
+    settings, sendMailModel, userSettings,
     autoLoadRemoteImages, isDark,
 } = useGlobalState()
 
-const { t } = useScopedI18n('views.index.SendMail')
+const applyAIReply = (text) => {
+    insertAIReplyText(sendMailModel.value, text)
+    isPreview.value = false
+}
+
+const { t, locale } = useScopedI18n('views.index.SendMail')
+const canSend = computed(() => settings.value.send_unlimited || settings.value.send_balance > 0)
+const hasDraft = computed(() => Boolean(sendMailModel.value.toMail || sendMailModel.value.subject || sendMailModel.value.content))
 
 const contentTypes = computed(() => [
     { label: t('text'), value: 'text' },
@@ -95,6 +110,9 @@ const send = async () => {
         subject,
         is_html: sendMailModel.value.contentType != 'text',
         content,
+        reply_mail_id: sendMailModel.value.replyMailId,
+        in_reply_to: sendMailModel.value.inReplyTo,
+        references: sendMailModel.value.references,
     }
 
     sending.value = true
@@ -113,8 +131,9 @@ const send = async () => {
             content: "",
         }
         isPreview.value = false
+        emit('sent')
         message.success(t("successSend"));
-        indexTab.value = 'sendbox'
+        await router.push(mailboxLocation('sendbox', locale.value))
     } catch (error) {
         message.error(error.message || "error");
     } finally {
@@ -167,25 +186,31 @@ onMounted(async () => {
     // make sure user_id is fetched
     if (!userSettings.value.user_id) await api.getUserSettings(message);
     await api.getSettings();
+    if (sendMailModel.value.composeMode === 'reply') {
+        await nextTick();
+        const textArea = composerInput.value?.textareaElRef;
+        textArea?.focus();
+        textArea?.setSelectionRange(0, 0);
+    }
 })
 </script>
 
 <template>
     <div class="composer-page" v-if="settings.address">
-        <n-card class="composer-card" :bordered="false" embedded>
+        <n-card class="composer-card" :bordered="false">
             <template #header>
                 <div class="composer-title">
-                    <h2>{{ t('composeMail') }}</h2>
-                    <n-text depth="3">{{ settings.address }}</n-text>
+                    <n-text depth="3">{{ t('senderAddress') }}</n-text>
+                    <n-text strong>{{ settings.address }}</n-text>
                 </div>
             </template>
             <template #header-extra>
-                <n-tag v-if="settings.send_balance > 0" type="success" round :bordered="false">
-                    {{ t('send_balance') }} · {{ settings.send_balance }}
-                </n-tag>
+                <span v-if="canSend" class="composer-quota">
+                    {{ settings.send_unlimited ? t('sendUnlimited') : `${t('send_balance')} · ${settings.send_balance}` }}
+                </span>
             </template>
 
-            <div v-if="!settings.send_balance || settings.send_balance <= 0">
+            <div v-if="!canSend">
                 <div class="access-state">
                     <div class="access-copy">
                         <h3>{{ t('balanceUnavailable') }}</h3>
@@ -198,38 +223,32 @@ onMounted(async () => {
 
             <template v-else>
                 <n-form class="composer-form" :model="sendMailModel" label-placement="top">
-                    <n-grid cols="1 m:2" responsive="screen" :x-gap="16">
-                        <n-grid-item>
-                            <n-form-item :label="t('senderAddress')" :label-props="{ for: 'send-mail-sender-address' }">
-                                <n-input :value="settings.address" readonly
-                                    :input-props="{ id: 'send-mail-sender-address' }" />
-                            </n-form-item>
-                        </n-grid-item>
-                        <n-grid-item>
-                            <n-form-item :label="t('senderName')" :label-props="{ for: 'send-mail-sender-name' }">
-                                <n-input v-model:value="sendMailModel.fromName"
-                                    :input-props="{ id: 'send-mail-sender-name' }" />
-                            </n-form-item>
-                        </n-grid-item>
-                        <n-grid-item>
-                            <n-form-item :label="t('recipientAddress')" required
-                                :label-props="{ for: 'send-mail-recipient-address' }">
-                                <n-input v-model:value="sendMailModel.toMail"
-                                    :input-props="{ id: 'send-mail-recipient-address' }" />
-                            </n-form-item>
-                        </n-grid-item>
-                        <n-grid-item>
-                            <n-form-item :label="t('recipientName')" :label-props="{ for: 'send-mail-recipient-name' }">
-                                <n-input v-model:value="sendMailModel.toName"
-                                    :input-props="{ id: 'send-mail-recipient-name' }" />
-                            </n-form-item>
-                        </n-grid-item>
-                    </n-grid>
+                    <n-form-item :label="t('recipientAddress')" required :show-feedback="false"
+                        :label-props="{ for: 'send-mail-recipient-address' }">
+                        <n-input v-model:value="sendMailModel.toMail"
+                            :input-props="{ id: 'send-mail-recipient-address', inputmode: 'email' }" />
+                    </n-form-item>
 
-                    <n-form-item :label="t('subject')" required :label-props="{ for: 'send-mail-subject' }">
+                    <n-form-item :label="t('subject')" required :show-feedback="false"
+                        :label-props="{ for: 'send-mail-subject' }">
                         <n-input v-model:value="sendMailModel.subject"
                             :input-props="{ id: 'send-mail-subject' }" />
                     </n-form-item>
+                    <details class="composer-options">
+                        <summary>{{ t('options') }}</summary>
+                        <div class="composer-option-fields">
+                            <n-form-item :label="t('recipientName')" :show-feedback="false"
+                                :label-props="{ for: 'send-mail-recipient-name' }">
+                                <n-input v-model:value="sendMailModel.toName"
+                                    :input-props="{ id: 'send-mail-recipient-name' }" />
+                            </n-form-item>
+                            <n-form-item :label="t('senderName')" :show-feedback="false"
+                                :label-props="{ for: 'send-mail-sender-name' }">
+                                <n-input v-model:value="sendMailModel.fromName"
+                                    :input-props="{ id: 'send-mail-sender-name' }" />
+                            </n-form-item>
+                        </div>
+                    </details>
 
                     <div class="editor-panel">
                         <div class="editor-panel-header">
@@ -256,14 +275,18 @@ onMounted(async () => {
                             <Editor v-model="sendMailModel.content" :defaultConfig="editorConfig" mode="default"
                                 @onCreated="handleCreated" />
                         </div>
-                        <n-input v-else class="compose-textarea" type="textarea" :bordered="false"
+                        <n-input v-else ref="composerInput" class="compose-textarea" type="textarea" :bordered="false"
                             v-model:value="sendMailModel.content" :placeholder="t('contentPlaceholder')"
                             :input-props="{ 'aria-label': t('content') }"
                             :autosize="{ minRows: 14, maxRows: 24 }" />
                     </div>
 
                     <div class="composer-actions">
-                        <n-text depth="3" class="draft-status">{{ t('draftSaved') }}</n-text>
+                        <n-text v-if="hasDraft" depth="3" class="draft-status">{{ t('draftSaved') }}</n-text>
+                        <ReplyDraftAI v-if="replySource && sendMailModel.composeMode === 'reply'"
+                            :source="replySource" scope="mailbox" :disabled="sending" @apply="applyAIReply" />
+                        <DraftTranslation v-model:draft="sendMailModel" scope="mailbox"
+                            :reply="sendMailModel.composeMode === 'reply'" :disabled="sending" @applied="isPreview = false" />
                         <n-button type="primary" :loading="sending" :disabled="sending" @click="send">
                             <template #icon><n-icon :component="SendRound" /></template>
                             {{ t('send') }}
@@ -278,13 +301,21 @@ onMounted(async () => {
 <style scoped>
 .composer-page {
     width: 100%;
-    padding: 14px 0 24px;
+    padding-bottom: 20px;
     text-align: left;
 }
 
 .composer-card {
-    width: min(900px, 100%);
-    margin: 0 auto;
+    width: min(790px, 100%);
+    margin-inline: auto;
+    background: var(--mail-surface, #fff);
+    border: 1px solid var(--mail-border, #e7eaf0);
+    border-radius: var(--mail-radius, 10px);
+}
+
+.composer-card :deep(.n-card-header) {
+    border-bottom: 1px solid var(--mail-border, #e7eaf0);
+    margin-bottom: 18px;
 }
 
 .composer-title {
@@ -294,15 +325,38 @@ onMounted(async () => {
     gap: 8px 12px;
 }
 
-.composer-title > h2 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-}
-
 .composer-title .n-text {
     font-size: 13px;
     word-break: break-all;
+}
+
+.composer-quota {
+    color: var(--mail-muted, #626b7c);
+    font-size: 12px;
+    font-weight: 450;
+}
+
+.composer-options {
+    color: var(--mail-muted, #626b7c);
+    font-size: 13px;
+}
+
+.composer-options summary {
+    width: fit-content;
+    cursor: pointer;
+    padding: 3px 0;
+}
+
+.composer-option-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 11px;
+}
+
+.composer-form {
+    display: grid;
+    gap: 14px;
 }
 
 .access-state {
@@ -331,8 +385,8 @@ onMounted(async () => {
 
 .editor-panel {
     overflow: hidden;
-    border: 1px solid rgba(128, 128, 128, 0.24);
-    border-radius: 3px;
+    border: 1px solid var(--mail-border, #e7eaf0);
+    border-radius: 8px;
 }
 
 .editor-panel-header {
@@ -340,9 +394,10 @@ onMounted(async () => {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 46px;
-    padding: 6px 10px 6px 14px;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    min-height: 40px;
+    padding: 5px 8px 5px 12px;
+    border-bottom: 1px solid var(--mail-border, #e7eaf0);
+    background: var(--mail-rail, #f7f8fb);
 }
 
 .editor-controls {
@@ -398,18 +453,22 @@ onMounted(async () => {
 .composer-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 16px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(128, 128, 128, 0.18);
+    margin-top: 2px;
 }
 
 .draft-status {
-    font-size: 13px;
+    font-size: 12px;
+    margin-inline-end: auto;
 }
 
 @media (max-width: 640px) {
+    .composer-option-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
     .composer-page {
         padding-top: 8px;
     }

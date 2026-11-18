@@ -1,0 +1,175 @@
+:root {
+    --mail-font: Inter, "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mail-bg: #f5f7fb;
+    --mail-rail: #f1f4fa;
+    --mail-surface: #ffffff;
+    --mail-ink: #131827;
+    --mail-muted: #626b7c;
+    --mail-border: #e0e6ef;
+    --mail-hover: #edf1f8;
+    --mail-active: #e9eeff;
+    --mail-accent: #304bc7;
+    --mail-brand: #304bc7;
+    --mail-shadow: none;
+    --mail-radius: 14px;
+    --workspace-header-height: 0px;
+    --workspace-gutter-block: 14px;
+    --workspace-gutter-inline: clamp(12px, 2vw, 24px);
+
+    color: var(--mail-ink);
+    background: var(--mail-bg);
+    color-scheme: light;
+    font-family: var(--mail-font);
+}
+
+:root.dark {
+    --mail-bg: #10141e;
+    --mail-rail: #151b28;
+    --mail-surface: #181d29;
+    --mail-ink: #eff1fa;
+    --mail-muted: #a3abc0;
+    --mail-border: #2a3245;
+    --mail-hover: #202838;
+    --mail-active: #232d53;
+    --mail-accent: #a8b6ff;
+    --mail-brand: #465bd9;
+
+    color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-width: 280px;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}
+
+:where(a, button):focus-visible {
+    outline: 2px solid var(--mail-accent);
+    outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+    color: var(--mail-ink);
+    line-height: 1.25;
+}
+
+.workspace-content {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 1740px;
+}
+
+.workspace-content--wide {
+    max-width: none;
+}
+
+.workspace-progress {
+    position: fixed;
+    z-index: 2100;
+    inset: 0 0 auto;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.workspace-progress::after {
+    content: "";
+    position: absolute;
+    width: 32%;
+    height: 100%;
+    background: var(--mail-accent);
+    animation: workspace-progress 1.35s ease-in-out infinite;
+}
+
+@keyframes workspace-progress {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(315%); }
+}
+
+.workspace-ad {
+    max-width: 980px;
+    margin: 20px auto;
+}
+
+.workspace-panel {
+    min-width: 0;
+    border: 1px solid var(--mail-border);
+    border-radius: var(--mail-radius);
+    background: var(--mail-surface);
+}
+
+.workspace-heading {
+    margin: 0;
+    font-size: clamp(22px, 2.5vw, 28px);
+    font-weight: 700;
+    letter-spacing: -.03em;
+}
+
+.workspace-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .workspace-progress::after {
+        animation: none;
+        width: 100%;
+    }
+}
+
+@media (hover: none) and (pointer: coarse) and (max-width: 1024px) {
+    :where(input, textarea, select, [contenteditable="true"]) {
+        font-size: 16px !important;
+    }
+
+    :where(.n-input, .n-input-number, .n-base-selection, .n-input-group-label) {
+        --n-font-size: 16px !important;
+    }
+}
+
+.workspace-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--mail-border);
+}
+
+.workspace-tabs > a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 11px;
+    border-radius: 6px;
+    color: var(--mail-muted);
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.workspace-tabs > a:hover {
+    color: var(--mail-ink);
+    background: var(--mail-hover);
+}
+
+.workspace-tabs > a[aria-current="page"] {
+    color: var(--mail-accent);
+    background: var(--mail-active);
+    font-weight: 650;
+}

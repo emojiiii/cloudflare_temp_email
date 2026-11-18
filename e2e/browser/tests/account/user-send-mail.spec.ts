@@ -117,7 +117,7 @@ test.describe('User send mail page', () => {
       expect((await sendResponse).ok()).toBe(true);
       expect((await sendboxResponse).ok()).toBe(true);
 
-      await expect(page.locator('.n-tabs-tab--active')).toHaveText('Sent');
+      await expect(page.getByRole('link', { name: 'Sent', exact: true }).last()).toHaveAttribute('aria-current', 'page');
       await expect(page.locator('.n-thing-header__title').filter({ hasText: subject }))
         .toHaveText(subject, { timeout: 15_000 });
     } finally {

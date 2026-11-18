@@ -311,20 +311,21 @@ export const getPasswords = (c: Context<HonoCustomType>): string[] => {
 }
 
 export const getAdminPasswords = (c: Context<HonoCustomType>): string[] => {
-    if (!c.env.ADMIN_PASSWORDS) {
-        return [];
-    }
-    // check if ADMIN_PASSWORDS is an array, if not use json.parse
-    if (!Array.isArray(c.env.ADMIN_PASSWORDS)) {
+    let passwords: unknown = c.env.ADMIN_PASSWORDS;
+    if (typeof passwords === "string") {
+        const value = passwords.trim();
+        if (!value) return [];
+        if (!value.startsWith("[")) return [value];
         try {
-            const res = JSON.parse(c.env.ADMIN_PASSWORDS) as string[];
-            return res.filter((item) => item.length > 0);
-        } catch (e) {
-            console.error("Failed to parse ADMIN_PASSWORDS", e);
+            passwords = JSON.parse(value);
+        } catch {
+            console.error("Failed to parse ADMIN_PASSWORDS as a JSON password array");
             return [];
         }
     }
-    return c.env.ADMIN_PASSWORDS.filter((item) => item.length > 0);
+    return Array.isArray(passwords)
+        ? passwords.filter((item): item is string => typeof item === "string" && item.length > 0)
+        : [];
 }
 
 export const checkIsAdmin = (c: Context<HonoCustomType>): boolean => {

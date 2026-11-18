@@ -6,13 +6,12 @@ import { FRONTEND_URL, WORKER_URL } from '../../../fixtures/test-helpers';
 async function openCreate(page: Page, locale = 'en', domains = ['test.example.com', 'other.example.com']) {
   await page.addInitScript(() => {
     localStorage.setItem('adminAuth', 'e2e-admin-pass');
-    sessionStorage.setItem('adminTab', 'account');
   });
   await page.route('**/open_api/settings', async route => {
     const response = await route.fetch();
     await route.fulfill({ json: { ...await response.json(), domains, prefix: 'tmp', randomSubdomainDomains: domains } });
   });
-  await page.goto(`${FRONTEND_URL}/${locale}/admin`);
+  await page.goto(`${FRONTEND_URL}/${locale}/manage/mailboxes`);
   await page.locator('.n-tabs-tab').getByText(locale === 'en' ? 'Create Email Address' : '创建邮箱', { exact: true }).click();
   await expect(page.getByRole('radio', { name: locale === 'en' ? 'Single creation' : '单个创建', exact: true })).toBeChecked();
   await expect(page.getByRole('textbox', { name: locale === 'en' ? 'Batch count' : '批量数量' })).toBeHidden();

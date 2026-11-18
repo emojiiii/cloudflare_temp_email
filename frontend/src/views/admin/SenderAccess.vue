@@ -1,5 +1,7 @@
 <script setup>
 import { ref, h, onMounted, watch } from 'vue';
+import { SearchOutlined } from '@vicons/material'
+import { NButton, NPopconfirm, NTag, useMessage } from 'naive-ui'
 import { useScopedI18n } from '@/i18n/app'
 
 import { useGlobalState } from '../../store'
@@ -44,20 +46,20 @@ const updateData = async () => {
 const fetchData = async () => {
   try {
     addressQuery.value = addressQuery.value.trim();
-    const { results, count: addressCount } = await api.fetch(
-      `/admin/address_sender`
-      + `?limit=${pageSize.value}`
-      + `&offset=${(page.value - 1) * pageSize.value}`
-      + (addressQuery.value ? `&address=${addressQuery.value}` : '')
-    );
+    const query = new URLSearchParams({ limit: pageSize.value, offset: (page.value - 1) * pageSize.value })
+    if (addressQuery.value) query.set('address', addressQuery.value)
+    const { results, count: addressCount } = await api.fetch(`/admin/address_sender?${query}`);
     data.value = results;
-    if (addressCount > 0) {
-      count.value = addressCount;
-    }
+    count.value = addressCount;
   } catch (error) {
     console.log(error)
     message.error(error.message || "error");
   }
+}
+
+const search = () => {
+  if (page.value === 1) return fetchData()
+  page.value = 1
 }
 
 const columns = [
@@ -84,20 +86,19 @@ const columns = [
     title: t('is_enabled'),
     key: "enabled",
     render(row) {
-      return h('div', [
-        h('span', row.enabled ? t('enable') : t('disable'))
-      ])
+      return h(NTag, { type: row.enabled ? 'success' : 'default', size: 'small', bordered: false },
+        { default: () => row.enabled ? t('enable') : t('disable') })
     }
   },
   {
     title: t('action'),
     key: 'actions',
     render(row) {
-      return h('div', [
+      return h('div', { class: 'sender-actions' }, [
         h(NButton,
           {
-            type: 'success',
-            tertiary: true,
+            secondary: true,
+            size: 'small',
             onClick: () => {
               showModal.value = true;
               curRow.value = row;
@@ -118,6 +119,7 @@ const columns = [
             trigger: () => h(NButton,
               {
                 tertiary: true,
+                size: 'small',
                 type: "error",
               },
               { default: () => t('delete') }
@@ -141,9 +143,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <n-modal v-model:show="showModal" preset="dialog">
-      <p>{{ curRow.address }}</p>
+  <div class="sender-panel">
+    <n-modal v-model:show="showModal" preset="dialog" :title="curRow.address">
       <p>{{ t('modalTip') }}</p>
       <n-form-item :show-label="false">
         <n-checkbox v-model:checked="senderEnabled">
@@ -159,33 +160,45 @@ onMounted(async () => {
         </n-button>
       </template>
     </n-modal>
-    <n-input-group>
-      <n-input v-model:value="addressQuery" @keydown.enter="fetchData" />
-      <n-button @click="fetchData" type="primary" tertiary>
-        {{ t('query') }}
-      </n-button>
-    </n-input-group>
-    <div style="overflow: auto;">
-      <div style="display: inline-block;">
-        <n-pagination v-model:page="page" v-model:page-size="pageSize" :item-count="count" :page-sizes="[20, 50, 100]"
-          show-size-picker>
-          <template #prefix="{ itemCount }">
-            {{ t('itemCount') }}: {{ itemCount }}
-          </template>
-        </n-pagination>
-      </div>
-      <n-data-table :columns="columns" :data="data" :bordered="false" embedded />
+    <form class="sender-search" @submit.prevent="search">
+      <n-input-group>
+        <n-input v-model:value="addressQuery" :placeholder="t('address')" clearable
+          :input-props="{ 'aria-label': t('address') }">
+          <template #prefix><n-icon :component="SearchOutlined" /></template>
+        </n-input>
+        <n-button attr-type="submit" secondary>{{ t('query') }}</n-button>
+      </n-input-group>
+    </form>
+    <n-data-table :columns="columns" :data="data" :bordered="false" :scroll-x="700" />
+    <div class="sender-pagination">
+      <n-pagination v-model:page="page" v-model:page-size="pageSize" :item-count="count" :page-sizes="[20, 50, 100]"
+        show-size-picker>
+        <template #prefix="{ itemCount }">{{ t('itemCount') }}: {{ itemCount }}</template>
+      </n-pagination>
     </div>
   </div>
 </template>
 
 <style scoped>
-.n-pagination {
-  margin-top: 10px;
-  margin-bottom: 10px;
+.sender-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
 }
 
-.n-data-table {
-  min-width: 700px;
+.sender-search {
+  width: min(100%, 400px);
+}
+
+.sender-pagination {
+  display: flex;
+  justify-content: flex-end;
+  overflow-x: auto;
+}
+
+.sender-panel :deep(.sender-actions) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 </style>

@@ -2,7 +2,7 @@
 import { ref, h, onMounted, watch, computed } from 'vue';
 import { useScopedI18n } from '@/i18n/app'
 import { NMenu, NButton, NBadge, NTag } from 'naive-ui';
-import { MenuFilled } from '@vicons/material'
+import { MenuFilled, PersonAddOutlined, SearchOutlined } from '@vicons/material'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
@@ -55,20 +55,20 @@ const fetchUserRoles = async () => {
 const fetchData = async () => {
     try {
         userQuery.value = userQuery.value.trim()
-        const { results, count: userCount } = await api.fetch(
-            `/admin/users`
-            + `?limit=${pageSize.value}`
-            + `&offset=${(page.value - 1) * pageSize.value}`
-            + (userQuery.value ? `&query=${userQuery.value}` : '')
-        );
+        const query = new URLSearchParams({ limit: pageSize.value, offset: (page.value - 1) * pageSize.value })
+        if (userQuery.value) query.set('query', userQuery.value)
+        const { results, count: userCount } = await api.fetch(`/admin/users?${query}`)
         data.value = results;
-        if (userCount > 0) {
-            count.value = userCount;
-        }
+        count.value = userCount
     } catch (error) {
         console.log(error)
         message.error(error.message || "error");
     }
+}
+
+const search = () => {
+    if (page.value === 1) return fetchData()
+    page.value = 1
 }
 
 const resetPassword = async () => {
@@ -300,7 +300,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div style="margin-top: 10px;">
+    <div class="users-panel">
         <n-modal v-model:show="showCreateUser" preset="dialog" :title="t('createUser')">
             <n-form>
                 <n-form-item-row :label="t('email')" required>
@@ -350,42 +350,55 @@ onMounted(async () => {
             </template>
         </n-modal>
         <n-modal v-model:show="showUserAddressManagement" preset="card" :title="t('userAddressManagement')"
-            style="width: 720px;">
+            style="width: min(720px, calc(100vw - 24px));">
             <UserAddressManagement :user_id="curUserId" />
         </n-modal>
-        <n-input-group>
-            <n-input v-model:value="userQuery" @keydown.enter="fetchData" />
-            <n-button @click="fetchData" type="primary" tertiary>
-                {{ t('query') }}
+        <div class="users-toolbar">
+            <form class="users-search" @submit.prevent="search">
+                <n-input-group>
+                    <n-input v-model:value="userQuery" clearable :placeholder="t('email')"
+                        :input-props="{ 'aria-label': t('email') }">
+                        <template #prefix><n-icon :component="SearchOutlined" /></template>
+                    </n-input>
+                    <n-button attr-type="submit" secondary>{{ t('query') }}</n-button>
+                </n-input-group>
+            </form>
+            <n-button @click="showCreateUser = true" type="primary">
+                <template #icon><n-icon :component="PersonAddOutlined" /></template>
+                {{ t('createUser') }}
             </n-button>
-        </n-input-group>
-        <div style="overflow: auto;">
-            <div style="display: inline-block;">
-                <n-pagination v-model:page="page" v-model:page-size="pageSize" :item-count="count"
-                    :page-sizes="[20, 50, 100]" show-size-picker>
-                    <template #prefix="{ itemCount }">
-                        {{ t('itemCount') }}: {{ itemCount }}
-                    </template>
-                    <template #suffix>
-                        <n-button @click="showCreateUser = true" size="small" tertiary type="primary"
-                            style="margin-left: 10px">
-                            {{ t('createUser') }}
-                        </n-button>
-                    </template>
-                </n-pagination>
-            </div>
-            <n-data-table :columns="columns" :data="data" :bordered="false" embedded />
+        </div>
+        <n-data-table :columns="columns" :data="data" :bordered="false" :scroll-x="800" />
+        <div class="users-pagination">
+            <n-pagination v-model:page="page" v-model:page-size="pageSize" :item-count="count"
+                :page-sizes="[20, 50, 100]" show-size-picker>
+                <template #prefix="{ itemCount }">{{ t('itemCount') }}: {{ itemCount }}</template>
+            </n-pagination>
         </div>
     </div>
 </template>
 
 <style scoped>
-.n-pagination {
-    margin-top: 10px;
-    margin-bottom: 10px;
+.users-panel {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
 }
 
-.n-data-table {
-    min-width: 800px;
+.users-toolbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.users-search {
+    width: min(100%, 400px);
+}
+
+.users-pagination {
+    display: flex;
+    justify-content: flex-end;
+    overflow-x: auto;
 }
 </style>

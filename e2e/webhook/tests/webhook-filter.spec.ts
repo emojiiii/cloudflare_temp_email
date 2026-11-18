@@ -7,20 +7,17 @@ const expression = { operator: 'and', children: [
   { operator: 'not', children: [{ field: 'text', operator: 'contains', value: 'maintenance' }] },
 ] };
 
-const adminLabels: Record<string, { mails: string; webhook: string; condition: string }> = {
-  zh: { mails: '邮件', webhook: '邮件 Webhook', condition: '匹配条件' },
-  en: { mails: 'Emails', webhook: 'Mail Webhook', condition: 'Condition' },
-  es: { mails: 'Correos', webhook: 'Webhook de correo', condition: 'Condición' },
-  'pt-BR': { mails: 'E-mails', webhook: 'Webhook de e-mail', condition: 'Condição' },
-  ja: { mails: 'メール', webhook: 'メールWebhook', condition: '条件' },
-  de: { mails: 'E-Mails', webhook: 'Mail-Webhook', condition: 'Bedingung' },
+const adminLabels: Record<string, { condition: string }> = {
+  zh: { condition: '匹配条件' },
+  en: { condition: 'Condition' },
+  es: { condition: 'Condición' },
+  'pt-BR': { condition: 'Condição' },
+  ja: { condition: '条件' },
+  de: { condition: 'Bedingung' },
 };
 
 async function openAdminWebhook(page: Page, locale = 'zh') {
-  const { mails, webhook } = adminLabels[locale];
-  await page.goto(`${FRONTEND_URL}/${locale}/admin`);
-  await page.getByText(mails, { exact: true }).click();
-  await page.getByText(webhook, { exact: true }).click();
+  await page.goto(`${FRONTEND_URL}/${locale}/manage/settings/webhook`);
 }
 
 test('Webhook configures the generic editor with server-supported fields and operators', { lock: 'webhook-settings' }, async ({ page, request }) => {
@@ -451,8 +448,7 @@ for (const scope of ['admin', 'mailbox']) {
       if (scope === 'admin') {
         await openAdminWebhook(page, 'en');
       } else {
-        await page.goto(`${FRONTEND_URL}/en/?jwt=${mailbox.jwt}`);
-        await page.getByText('Webhook Settings', { exact: true }).click();
+        await page.goto(`${FRONTEND_URL}/en/settings/webhook?jwt=${mailbox.jwt}`);
       }
       const editor = page.getByTestId('filter-editor').first();
       await editor.getByText('JSON', { exact: true }).click();

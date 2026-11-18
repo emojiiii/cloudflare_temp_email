@@ -16,12 +16,14 @@ import { api } from '../../api'
 import Login from '../common/Login.vue'
 import AccountSettings from './AccountSettings.vue'
 import { processItem } from '../../utils/email-parser'
+import { buildForwardModel, buildReplyModel } from '../../utils/mail-actions'
 import MailContentRenderer from '../../components/MailContentRenderer.vue'
 import AddressSelect from '../../components/AddressSelect.vue'
 import AddressCredentialModal from '../../components/AddressCredentialModal.vue'
 
 const { jwt, settings, useSimpleIndex, showAddressCredential, openSettings, loading } = useGlobalState()
 const message = useMessage()
+const emit = defineEmits(['compose'])
 
 // 邮件数据
 const currentPage = ref(1)
@@ -32,6 +34,12 @@ const currentAutoRefreshInterval = ref(60)
 const timer = ref(null)
 
 const { t } = useScopedI18n('views.index.SimpleIndex')
+const { t: tMailBox } = useScopedI18n('components.MailBox')
+
+const openComposer = (mode) => {
+    const draft = mode === 'reply' ? buildReplyModel(currentMail.value) : buildForwardModel(currentMail.value, tMailBox('forwardMail'));
+    emit('compose', draft, currentMail.value, mode);
+};
 
 // 复制地址
 const copyAddress = async () => {
@@ -184,7 +192,7 @@ onBeforeUnmount(() => {
                         </template>
                         {{ t('exitSimpleIndex') }}
                     </n-button>
-                    <n-button @click="showAccountSettingsCard = true" tertiary size="small">
+                    <n-button v-if="!openSettings.receiveOnlyUsers" @click="showAccountSettingsCard = true" tertiary size="small">
                         <template #icon>
                             <n-icon>
                                 <SettingsFilled />
@@ -201,7 +209,7 @@ onBeforeUnmount(() => {
             </n-card>
 
             <!-- 账户设置卡片 -->
-            <n-card v-if="showAccountSettingsCard" :bordered="false" embedded closable
+            <n-card v-if="showAccountSettingsCard && !openSettings.receiveOnlyUsers" :bordered="false" embedded closable
                 @close="showAccountSettingsCard = false" :title="t('mailboxSettings')">
                 <AccountSettings />
             </n-card>
@@ -241,10 +249,11 @@ onBeforeUnmount(() => {
                         {{ currentMail.subject }}
                     </h3>
                     <div style="margin-top: 16px;">
-                        <MailContentRenderer :mail="currentMail" :showEMailTo="false" :showReply="false"
-                            :enableUserDeleteEmail="openSettings.enableUserDeleteEmail" :showSaveS3="false"
+                        <MailContentRenderer :mail="currentMail" :showEMailTo="false" :showReply="openSettings.enableSendMail && !openSettings.receiveOnlyUsers"
+                            :enableUserDeleteEmail="openSettings.enableUserDeleteEmail && !openSettings.receiveOnlyUsers" :showSaveS3="false"
                             :enableMailReadStatus="openSettings.enableMailReadStatus"
                             :onUpdateMailReadStatus="toggleCurrentMailUnread"
+                            :onReply="() => openComposer('reply')" :onForward="() => openComposer('forward')"
                             :onDelete="deleteMail" />
                     </div>
                 </div>
@@ -263,6 +272,9 @@ onBeforeUnmount(() => {
 .n-card {
     margin-top: 20px;
     width: 100%;
+    --n-color: var(--mail-surface, #fff) !important;
+    border: 1px solid var(--mail-border, #e2e8e2);
+    border-radius: 18px;
 }
 
 .mail-title-unread {

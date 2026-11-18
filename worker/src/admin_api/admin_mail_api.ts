@@ -1,21 +1,14 @@
 import { Context } from "hono";
 import { handleMailListQuery } from "../common";
 import { resolveRawEmailRow } from "../gzip";
+import { listInboxMails, updateInboxReadStatus } from '../mails_api/inbox';
 
 export default {
     getMails: async (c: Context<HonoCustomType>) => {
-        const { address, limit, offset } = c.req.query();
-        const addressQuery = address ? `address = ?` : "";
-        const addressParams = address ? [address] : [];
-        const filterQuerys = [addressQuery].filter((item) => item).join(" and ");
-        const finalQuery = filterQuerys.length > 0 ? `where ${filterQuerys}` : "";
-        const filterParams = [...addressParams]
-        return await handleMailListQuery(c,
-            `SELECT * FROM raw_mails ${finalQuery}`,
-            `SELECT count(*) as count FROM raw_mails ${finalQuery}`,
-            filterParams, limit, offset
-        );
+        const address = c.req.query('address');
+        return listInboxMails(c, 'raw_mails rm', address ? ['rm.address = ?'] : [], address ? [address] : []);
     },
+    updateMailReadStatus: (c: Context<HonoCustomType>) => updateInboxReadStatus(c),
     getUnknowMails: async (c: Context<HonoCustomType>) => {
         const { limit, offset } = c.req.query();
         return await handleMailListQuery(c,

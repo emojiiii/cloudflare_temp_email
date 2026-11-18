@@ -11,9 +11,72 @@ import { GeoData } from '../models'
 import { handleListQuery, isSendMailBindingEnabled, updateAddressUpdatedAt } from '../common'
 import { getSendBalanceState, requestSendMailAccess } from './send_balance';
 import { ensureSendMailLimit, increaseSendMailLimitCount } from './send_mail_limit_utils';
+import { resendMailSourceTag, sendboxDeliveryJoin, sendboxFields } from './resend_delivery';
+import { getResendKey } from '../provider_credentials';
 
 
 export const api = new Hono<HonoCustomType>()
+
+type SendMailContent = {
+    from_name: string;
+    to_mail: string;
+    to_name: string;
+    subject: string;
+    content: string;
+    is_html: boolean;
+}
+
+export type SendMailInput = SendMailContent & {
+    in_reply_to?: string;
+    references?: string[];
+    reply_mail_id?: number;
+}
+
+type MailSubmissionStatus = 'accepted' | 'failed' | 'unknown';
+
+class MailSubmissionError extends Error {
+    constructor(message: string, readonly status: 'failed' | 'unknown', readonly resendRejectionReason?: string) {
+        super(message);
+    }
+}
+
+const MAX_MAIL_HEADER_LENGTH = 998;
+
+export const isMessageId = (value: unknown): value is string => (
+    typeof value === "string"
+    && value.length <= MAX_MAIL_HEADER_LENGTH - "In-Reply-To: ".length
+    && /^<[^<>@]+@[^<>@]+>$/.test(value)
+    && !/[^!-~]/.test(value)
+);
+
+const getReplyHeaders = (
+    { in_reply_to: inReplyTo, references }: SendMailInput,
+    invalidInputMessage: string,
+): Record<string, string> | undefined => {
+    if ((inReplyTo !== undefined && !isMessageId(inReplyTo))
+        || (references !== undefined && (!Array.isArray(references) || !references.every(isMessageId)))) {
+        throw new Error(invalidInputMessage);
+    }
+    if (!inReplyTo && !references?.length) return;
+
+    const ids = new Set(references);
+    if (inReplyTo) {
+        ids.delete(inReplyTo);
+        ids.add(inReplyTo);
+    }
+
+    // Keep the newest references when the chain cannot fit on a MIME header line.
+    const orderedIds = [...ids];
+    let first = orderedIds.length;
+    let available = MAX_MAIL_HEADER_LENGTH - "References: ".length + 1;
+    while (first > 0 && orderedIds[first - 1].length + 1 <= available) {
+        available -= orderedIds[--first].length + 1;
+    }
+    return {
+        ...(inReplyTo ? { "In-Reply-To": inReplyTo } : {}),
+        References: orderedIds.slice(first).join(" "),
+    };
+};
 
 api.post('/api/request_send_mail_access', async (c) => {
     const msgs = i18n.getMessagesbyContext(c);
@@ -33,10 +96,8 @@ api.post('/api/request_send_mail_access', async (c) => {
 
 export const sendMailToVerifyAddress = async (
     c: Context<HonoCustomType>, address: string,
-    reqJson: {
-        from_name: string, to_mail: string, to_name: string,
-        subject: string, content: string, is_html: boolean
-    }
+    reqJson: SendMailContent,
+    headers?: Record<string, string>,
 ): Promise<void> => {
     const {
         from_name, to_mail, to_name,
@@ -46,6 +107,7 @@ export const sendMailToVerifyAddress = async (
     msg.setSender(from_name ? { name: from_name, addr: address } : address);
     msg.setRecipient(to_name ? { name: to_name, addr: to_mail } : to_mail);
     msg.setSubject(subject);
+    if (headers) msg.setHeaders(headers);
     msg.addMessage({
         contentType: is_html ? 'text/html' : 'text/plain',
         data: content
@@ -57,10 +119,8 @@ export const sendMailToVerifyAddress = async (
 
 export const sendMailByBinding = async (
     c: Context<HonoCustomType>, address: string,
-    reqJson: {
-        from_name: string, to_mail: string, to_name: string,
-        subject: string, content: string, is_html: boolean
-    }
+    reqJson: SendMailContent,
+    headers?: Record<string, string>,
 ): Promise<void> => {
     const {
         from_name, to_mail, to_name,
@@ -70,26 +130,23 @@ export const sendMailByBinding = async (
         from: from_name ? { email: address, name: from_name } : address,
         to: to_name ? [`${to_name} <${to_mail}>`] : [to_mail],
         subject,
+        ...(headers ? { headers } : {}),
         ...(is_html ? { html: content } : { text: content }),
     });
 }
 
 const sendMailByResend = async (
-    c: Context<HonoCustomType>, address: string,
-    reqJson: {
-        from_name: string, to_mail: string, to_name: string,
-        subject: string, content: string, is_html: boolean
-    }
-): Promise<void> => {
-    const mailDomain = getMailDomain(address);
-    const token = c.env[
-        `RESEND_TOKEN_${mailDomain.replace(/\./g, "_").toUpperCase()}`
-    ] || c.env.RESEND_TOKEN;
+    token: string, address: string,
+    reqJson: SendMailContent,
+    headers?: Record<string, string>,
+): Promise<string> => {
     const resend = new Resend(token);
     const { data, error } = await resend.emails.send({
         from: reqJson.from_name ? `${reqJson.from_name} <${address}>` : address,
         to: reqJson.to_name ? `${reqJson.to_name} <${reqJson.to_mail}>` : reqJson.to_mail,
         subject: reqJson.subject,
+        headers,
+        tags: [resendMailSourceTag],
         ...(reqJson.is_html ? {
             html: reqJson.content,
         } : {
@@ -97,43 +154,101 @@ const sendMailByResend = async (
         })
     });
     if (error) {
-        throw new Error(`Resend error: ${error.name} ${error.message}`);
+        const status = error.statusCode;
+        const state = status !== null && status >= 400 && status < 500 && status !== 408 ? 'failed' : 'unknown';
+        const reason = state === 'failed' && /^[a-z][a-z0-9_]{1,79}$/.test(error.name) ? error.name : undefined;
+        throw new MailSubmissionError(`Resend error: ${error.name} ${error.message}`, state, reason);
+    }
+    if (!data?.id) {
+        throw new MailSubmissionError('Resend returned no message ID', 'unknown');
     }
     console.log(`Resend success: ${JSON.stringify(data)}`);
+    return data.id;
 }
 
 const sendMailBySmtp = async (
     c: Context<HonoCustomType>, address: string,
-    reqJson: {
-        from_name: string, to_mail: string, to_name: string,
-        subject: string, content: string, is_html: boolean
-    },
-    smtpOptions: WorkerMailerOptions
+    reqJson: SendMailContent,
+    smtpOptions: WorkerMailerOptions,
+    headers?: Record<string, string>,
 ): Promise<void> => {
-    await WorkerMailer.send(
-        smtpOptions,
-        {
-            from: {
-                name: reqJson.from_name,
-                email: address
-            },
-            to: {
-                name: reqJson.to_name,
-                email: reqJson.to_mail
-            },
+    try {
+        await WorkerMailer.send(smtpOptions, {
+            from: { name: reqJson.from_name, email: address },
+            to: { name: reqJson.to_name, email: reqJson.to_mail },
             subject: reqJson.subject,
+            headers,
             text: reqJson.is_html ? undefined : reqJson.content,
-            html: reqJson.is_html ? reqJson.content : undefined
+            html: reqJson.is_html ? reqJson.content : undefined,
+        });
+    } catch (error) {
+        // WorkerMailer exposes negative SMTP replies in the transaction error message.
+        if (error instanceof Error && /^(?:Invalid (?:MAIL FROM|RCPT TO): [^\r\n]*?> |Failed (?:to send DATA|send email body): )[45]\d{2}(?:[ -]|$)/.test(error.message)) {
+            throw new MailSubmissionError(error.message, 'failed');
         }
-    )
+        throw error;
+    }
 }
+
+const submissionFailureStatus = (error: unknown): 'failed' | 'unknown' => {
+    if (error instanceof MailSubmissionError) return error.status;
+    if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+        && /^E_[A-Z_]+$/.test(error.code) && error.code !== 'E_INTERNAL_SERVER_ERROR') {
+        return 'failed';
+    }
+    return 'unknown';
+};
+
+const saveMailSubmission = async (
+    c: Context<HonoCustomType>, address: string, mail: SendMailInput, status: MailSubmissionStatus,
+    resendEmailId: string | null = null, resendRejectionReason: string | null = null,
+): Promise<void> => {
+    const {
+        from_name, to_mail, to_name, subject, content, is_html, in_reply_to, references, reply_mail_id,
+    } = mail;
+    try {
+        const geoData = new GeoData(c.req.raw.headers.get('cf-connecting-ip'), c.req.raw.cf as any);
+        const raw = JSON.stringify({
+            version: 'v2', from_name, to_mail, to_name, subject, content, is_html,
+            in_reply_to, references, reply_mail_id, geoData,
+        });
+        const statements = [c.env.DB.prepare(
+            'INSERT INTO sendbox (address, raw, send_status, resend_email_id, resend_rejection_reason) VALUES (?, ?, ?, ?, ?)',
+        ).bind(address, raw, status, resendEmailId, resendRejectionReason)];
+        if (status === 'accepted' && reply_mail_id !== undefined) {
+            statements.push(c.env.DB.prepare(
+                'UPDATE raw_mails SET is_replied = 1 WHERE address = ? AND id = ?',
+            ).bind(address, reply_mail_id));
+        } else if (status === 'accepted' && in_reply_to) {
+            statements.push(c.env.DB.prepare(
+                'UPDATE raw_mails SET is_replied = 1 WHERE address = ? AND message_id IN (?, ?)',
+            ).bind(address, in_reply_to, in_reply_to.slice(1, -1)));
+        }
+        const results = await c.env.DB.batch(statements);
+        if (results.some(result => !result.success)) console.warn('Failed to save mail submission history');
+    } catch {
+        // An accepted send remains successful even when its local history cannot be recorded.
+        console.warn('Failed to save mail submission history');
+    }
+};
+
+export const submitMail = async (
+    c: Context<HonoCustomType>, address: string, mail: SendMailInput, submit: () => Promise<unknown>,
+): Promise<void> => {
+    let result: unknown;
+    try {
+        result = await submit();
+    } catch (error) {
+        const reason = error instanceof MailSubmissionError ? error.resendRejectionReason : undefined;
+        await saveMailSubmission(c, address, mail, submissionFailureStatus(error), null, reason);
+        throw error;
+    }
+    await saveMailSubmission(c, address, mail, 'accepted', typeof result === 'string' ? result : null);
+};
 
 export const sendMail = async (
     c: Context<HonoCustomType>, address: string,
-    reqJson: {
-        from_name: string, to_mail: string, to_name: string,
-        subject: string, content: string, is_html: boolean
-    },
+    reqJson: SendMailInput,
     options?: {
         isAdmin?: boolean
     }
@@ -174,43 +289,32 @@ export const sendMail = async (
     if (!content) {
         throw new Error(msgs.ContentEmptyMsg)
     }
+    if (reqJson.reply_mail_id !== undefined && (!Number.isSafeInteger(reqJson.reply_mail_id) || reqJson.reply_mail_id < 1)) {
+        throw new Error(msgs.InvalidInputMsg);
+    }
+    const replyHeaders = getReplyHeaders(reqJson, msgs.InvalidInputMsg);
     await ensureSendMailLimit(c);
 
-    // send to verified address list, do not update balance
-    const resendEnabled = c.env.RESEND_TOKEN || c.env[
-        `RESEND_TOKEN_${mailDomain.replace(/\./g, "_").toUpperCase()}`
-    ];
     // send by smtp
     const smtpConfigMap = getJsonObjectValue<Record<string, WorkerMailerOptions>>(c.env.SMTP_CONFIG);
     const smtpConfig = getDomainMapValue(smtpConfigMap, mailDomain);
     // send by verified address list
-    let sendByVerifiedAddressList = false;
-    if (c.env.SEND_MAIL) {
-        const verifiedAddressList = await getJsonSetting(c, CONSTANTS.VERIFIED_ADDRESS_LIST_KEY) || [];
-        if (verifiedAddressList.includes(to_mail)) {
-            await sendMailToVerifyAddress(c, address, reqJson);
-            sendByVerifiedAddressList = true;
-        }
-    }
-    const sendMailBindingEnabled = isSendMailBindingEnabled(c, mailDomain);
-
-    // send mail workflow
+    const verifiedAddressList = c.env.SEND_MAIL ? await getJsonSetting(c, CONSTANTS.VERIFIED_ADDRESS_LIST_KEY) || [] : [];
+    const sendByVerifiedAddressList = verifiedAddressList.includes(to_mail);
+    const resendKey = sendByVerifiedAddressList ? null : await getResendKey(c, mailDomain);
+    let submit: () => Promise<void | string>;
     if (sendByVerifiedAddressList) {
-        // do not update balance
-    }
-    // send by resend
-    else if (resendEnabled) {
-        await sendMailByResend(c, address, reqJson);
-    }
-    else if (smtpConfig) {
-        await sendMailBySmtp(c, address, reqJson, smtpConfig);
-    }
-    else if (sendMailBindingEnabled) {
-        await sendMailByBinding(c, address, reqJson);
-    }
-    else {
+        submit = () => sendMailToVerifyAddress(c, address, reqJson, replyHeaders);
+    } else if (resendKey) {
+        submit = () => sendMailByResend(resendKey, address, reqJson, replyHeaders);
+    } else if (smtpConfig) {
+        submit = () => sendMailBySmtp(c, address, reqJson, smtpConfig, replyHeaders);
+    } else if (isSendMailBindingEnabled(c, mailDomain)) {
+        submit = () => sendMailByBinding(c, address, reqJson, replyHeaders);
+    } else {
         throw new Error(`${msgs.EnableResendOrSmtpOrSendMailMsg} (${mailDomain})`);
     }
+    await submitMail(c, address, reqJson, submit);
     await increaseSendMailLimitCount(c);
 
     // update balance
@@ -228,24 +332,6 @@ export const sendMail = async (
     }
     // update address updated_at
     updateAddressUpdatedAt(c, address);
-    // save to sendbox
-    try {
-        const reqIp = c.req.raw.headers.get("cf-connecting-ip")
-        const geoData = new GeoData(reqIp, c.req.raw.cf as any);
-        const body = {
-            version: "v2",
-            ...reqJson,
-            geoData: geoData,
-        };
-        const { success: success2 } = await c.env.DB.prepare(
-            `INSERT INTO sendbox (address, raw) VALUES (?, ?)`
-        ).bind(address, JSON.stringify(body)).run();
-        if (!success2) {
-            console.warn(`Failed to save to sendbox for ${address}`);
-        }
-    } catch (e) {
-        console.warn(`Failed to save to sendbox for ${address}`);
-    }
 }
 
 api.post('/api/send_mail', async (c) => {
@@ -264,8 +350,8 @@ api.post('/external/api/send_mail', async (c) => {
     const body = await c.req.json();
     try {
         const { address } = await verifyAddressToken(c, body?.token);
-        const { from_name, to_mail, to_name, subject, content, is_html } = body;
-        const reqJson = { from_name, to_mail, to_name, subject, content, is_html };
+        const { from_name, to_mail, to_name, subject, content, is_html, in_reply_to, references, reply_mail_id } = body;
+        const reqJson = { from_name, to_mail, to_name, subject, content, is_html, in_reply_to, references, reply_mail_id };
         await sendMail(c, address as string, reqJson);
         return c.json({ status: "ok" })
     } catch (e) {
@@ -282,7 +368,7 @@ export const getSendbox = async (
         return c.json({ "error": "No address" }, 400)
     }
     return await handleListQuery(c,
-        `SELECT * FROM sendbox where address = ? `,
+        `SELECT ${sendboxFields} FROM sendbox sb${sendboxDeliveryJoin} WHERE sb.address = ?`,
         `SELECT count(*) as count FROM sendbox where address = ? `,
         [address], limit, offset
     );

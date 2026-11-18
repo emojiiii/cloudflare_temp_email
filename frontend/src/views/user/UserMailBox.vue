@@ -1,75 +1,51 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
-import { useScopedI18n } from '@/i18n/app'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { api } from '../../api'
 import { useGlobalState } from '../../store'
-import MailBox from '../../components/MailBox.vue';
+import { getAIReplySource } from '../../utils/mail-actions'
+import MailBox from '../../components/MailBox.vue'
+import MailboxTabs from '../../components/MailboxTabs.vue'
 
-const message = useMessage()
-const { openSettings } = useGlobalState()
+const emit = defineEmits(['reply'])
+const { openSettings, isReceiveOnlyAccount } = useGlobalState()
+const route = useRoute()
+const router = useRouter()
+const addressFilter = computed(() => typeof route.query.address === 'string' ? route.query.address : '')
 
-const { t } = useScopedI18n('views.user.UserMailBox')
-
-const mailBoxKey = ref("")
-const addressFilter = ref();
-const addressFilterOptions = ref([]);
-
-const queryMail = () => {
-    addressFilter.value = addressFilter.value ? addressFilter.value.trim() : addressFilter.value;
-    mailBoxKey.value = Date.now();
+const fetchMailData = (params, options) => {
+    if (addressFilter.value) params.set('address', addressFilter.value)
+    return api.fetch(`/user_api/mails?${params}`, options)
 }
 
-const fetchMailData = async (limit, offset) => {
-    return await api.fetch(
-        `/user_api/mails`
-        + `?limit=${limit}`
-        + `&offset=${offset}`
-        + (addressFilter.value ? `&address=${addressFilter.value}` : '')
-    );
+const fetchMailboxes = ({ limit, offset, query, signal }) => {
+    const params = new URLSearchParams({ limit, offset })
+    if (query) params.set('query', query)
+    return api.fetch(`/user_api/bind_address?${params}`, { signal, showLoading: false })
 }
 
-const fetchAddresData = async () => {
-    try {
-        const { results } = await api.fetch(
-            `/user_api/bind_address?limit=100&offset=0`
-        );
-        addressFilterOptions.value = results.map((item) => {
-            return {
-                label: item.name,
-                value: item.name
-            }
-        });
-    } catch (error) {
-        console.log(error)
-        message.error(error.message || "error");
-    }
+const selectMailbox = address => {
+    if (address !== addressFilter.value) return router.push({ query: { ...route.query, address: address || undefined } })
 }
 
-const deleteMail = async (curMailId) => {
-    await api.fetch(`/user_api/mails/${curMailId}`, { method: 'DELETE' });
-};
+const deleteMail = (id) => api.fetch(`/user_api/mails/${id}`, { method: 'DELETE' })
+const updateMailReadStatus = (id, isUnread) => api.fetch(`/user_api/mails/${id}/read`, {
+    method: 'PATCH', body: JSON.stringify({ isUnread }), showLoading: false,
+})
 
-watch(addressFilter, async (newValue) => {
-    queryMail();
-});
+const openCompose = (draft, mail, mode) => {
+    emit('reply', { ...draft, address: mail.address, mode, replyKey: `${Date.now()}-${mail.id}-${mode}` },
+        mode === 'reply' ? getAIReplySource(mail) : null)
+}
 
-onMounted(() => {
-    fetchAddresData();
-});
 </script>
 
 <template>
-    <div style="margin-top: 10px;">
-        <n-input-group>
-            <n-select v-model:value="addressFilter" :options="addressFilterOptions" clearable
-                :placeholder="t('addressQueryTip')" />
-            <n-button @click="queryMail" type="primary" tertiary>
-                {{ t('query') }}
-            </n-button>
-        </n-input-group>
-        <div style="margin-top: 10px;"></div>
-        <MailBox :key="mailBoxKey" :enableUserDeleteEmail="openSettings.enableUserDeleteEmail" :fetchMailData="fetchMailData"
-            :deleteMail="deleteMail" :showFilterInput="true" />
-    </div>
+    <MailboxTabs :model-value="addressFilter" :fetch-mailboxes="fetchMailboxes" @update:model-value="selectMailbox" />
+    <MailBox :key="addressFilter || ''" translation-scope="user"
+        :enable-user-delete-email="openSettings.enableUserDeleteEmail && !isReceiveOnlyAccount"
+        :fetch-mail-data="fetchMailData" :delete-mail="deleteMail" show-filter-input :show-e-mail-to="!addressFilter"
+        :enable-mail-read-status="openSettings.enableMailReadStatus" :update-mail-read-status="updateMailReadStatus"
+        :show-reply="openSettings.enableSendMail && !isReceiveOnlyAccount" :on-compose="openCompose" />
 </template>

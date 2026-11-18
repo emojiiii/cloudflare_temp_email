@@ -1,13 +1,17 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useScopedI18n } from '@/i18n/app'
-import { CleaningServicesFilled, AddFilled, DeleteFilled } from '@vicons/material'
+import { AddFilled, DeleteFilled } from '@vicons/material'
 
-import { useGlobalState } from '../../store'
 import { api } from '../../api'
 
-const { loading } = useGlobalState()
 const message = useMessage()
+const loading = ref(false)
+const loaded = ref(false)
+const saving = ref(false)
+const runningCleanup = ref('')
+const pendingCleanup = ref(null)
+const showCleanupConfirm = ref(false)
 const cleanupModel = ref({
     enableMailsAutoCleanup: false,
     cleanMailsDays: 30,
@@ -28,15 +32,45 @@ const cleanupModel = ref({
 
 const { t } = useScopedI18n('views.admin.Maintenance')
 
-const cleanup = async (cleanType, cleanDays) => {
+const cleanupGroups = [
+    {
+        title: 'messages',
+        rules: [
+            { type: 'mails', label: 'mailBoxLabel', enabled: 'enableMailsAutoCleanup', days: 'cleanMailsDays' },
+            { type: 'mails_unknow', label: 'mailUnknowLabel', enabled: 'enableUnknowMailsAutoCleanup', days: 'cleanUnknowMailsDays' },
+            { type: 'sendbox', label: 'sendBoxLabel', enabled: 'enableSendBoxAutoCleanup', days: 'cleanSendBoxDays' },
+        ],
+    },
+    {
+        title: 'addresses',
+        rules: [
+            { type: 'addressCreated', label: 'addressCreateLabel', enabled: 'enableAddressAutoCleanup', days: 'cleanAddressDays' },
+            { type: 'inactiveAddress', label: 'inactiveAddressLabel', enabled: 'enableInactiveAddressAutoCleanup', days: 'cleanInactiveAddressDays' },
+            { type: 'unboundAddress', label: 'unboundAddressLabel', enabled: 'enableUnboundAddressAutoCleanup', days: 'cleanUnboundAddressDays' },
+            { type: 'emptyAddress', label: 'emptyAddressLabel', enabled: 'enableEmptyAddressAutoCleanup', days: 'cleanEmptyAddressDays' },
+        ],
+    },
+]
+
+const confirmCleanup = (rule) => {
+    pendingCleanup.value = { type: rule.type, label: t(rule.label), days: cleanupModel.value[rule.days] }
+    showCleanupConfirm.value = true
+}
+
+const cleanup = async () => {
+    const { type, days } = pendingCleanup.value
+    runningCleanup.value = type
     try {
         await api.fetch('/admin/cleanup', {
             method: 'POST',
-            body: JSON.stringify({ cleanType, cleanDays })
+            body: { cleanType: type, cleanDays: days },
+            showLoading: false,
         });
         message.success(t('cleanupSuccess'));
     } catch (error) {
         message.error(error.message || "error");
+    } finally {
+        runningCleanup.value = ''
     }
 }
 
@@ -57,193 +91,196 @@ const removeCustomSql = (index) => {
 }
 
 const fetchData = async () => {
+    loading.value = true
     try {
-        const res = await api.fetch('/admin/auto_cleanup');
+        const res = await api.fetch('/admin/auto_cleanup', { showLoading: false });
         if (res) Object.assign(cleanupModel.value, res);
         if (!cleanupModel.value.customSqlCleanupList) {
             cleanupModel.value.customSqlCleanupList = [];
         }
+        loaded.value = true
     } catch (error) {
         message.error(error.message || "error");
+    } finally {
+        loading.value = false
     }
 }
 
 const save = async () => {
+    saving.value = true
     try {
         await api.fetch('/admin/auto_cleanup', {
             method: 'POST',
-            body: JSON.stringify(cleanupModel.value)
+            body: cleanupModel.value,
+            showLoading: false,
         });
         message.success(t('saveSuccess'));
     } catch (error) {
         message.error(error.message || "error");
+    } finally {
+        saving.value = false
     }
 }
 
-onMounted(async () => {
-    await fetchData();
-})
+onMounted(fetchData)
 </script>
 
 
 <template>
-    <div class="center">
-        <n-card :bordered="false" embedded>
-            <n-alert :show-icon="false" :bordered="false" type="warning">
-                <span>{{ t('cronTip') }}</span>
-            </n-alert>
-            <n-flex justify="end">
-                <n-button @click="save" type="primary" :loading="loading">
-                    {{ t('save') }}
-                </n-button>
-            </n-flex>
-            <n-tabs type="segment" style="margin-top: 16px;">
-                <n-tab-pane name="basic" :tab="t('basicCleanup')">
-                    <n-form :model="cleanupModel">
-                        <n-form-item-row :label="t('mailBoxLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableMailsAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanMailsDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('mails', cleanupModel.cleanMailsDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                        <n-form-item-row :label="t('mailUnknowLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableUnknowMailsAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanUnknowMailsDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('mails_unknow', cleanupModel.cleanUnknowMailsDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                        <n-form-item-row :label="t('sendBoxLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableSendBoxAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanSendBoxDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('sendbox', cleanupModel.cleanSendBoxDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                        <n-form-item-row :label="t('addressCreateLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableAddressAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanAddressDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('addressCreated', cleanupModel.cleanAddressDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                        <n-form-item-row :label="t('inactiveAddressLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableInactiveAddressAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanInactiveAddressDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('inactiveAddress', cleanupModel.cleanInactiveAddressDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                        <n-form-item-row :label="t('unboundAddressLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableUnboundAddressAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanUnboundAddressDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('unboundAddress', cleanupModel.cleanUnboundAddressDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                        <n-form-item-row :label="t('emptyAddressLabel')">
-                            <n-checkbox v-model:checked="cleanupModel.enableEmptyAddressAutoCleanup">
-                                {{ t('autoCleanup') }}
-                            </n-checkbox>
-                            <n-input-number v-model:value="cleanupModel.cleanEmptyAddressDays" :placeholder="t('tip')" />
-                            <n-button @click="cleanup('emptyAddress', cleanupModel.cleanEmptyAddressDays)">
-                                <template #icon>
-                                    <n-icon :component="CleaningServicesFilled" />
-                                </template>
-                                {{ t('cleanupNow') }}
-                            </n-button>
-                        </n-form-item-row>
-                    </n-form>
-                </n-tab-pane>
-                <n-tab-pane name="custom_sql" :tab="t('customSqlCleanup')">
-                    <n-alert :show-icon="false" :bordered="false" type="info" style="margin-bottom: 16px;">
-                        <span>{{ t('customSqlTip') }}</span>
-                    </n-alert>
-                    <n-space vertical>
-                        <n-card v-for="(item, index) in cleanupModel.customSqlCleanupList" :key="item.id" size="small">
-                            <n-space vertical>
-                                <n-space align="center">
-                                    <n-checkbox v-model:checked="item.enabled">
-                                        {{ t('autoCleanup') }}
-                                    </n-checkbox>
-                                    <n-input v-model:value="item.name" :placeholder="t('sqlNamePlaceholder')" style="width: 200px;" />
-                                    <n-button @click="removeCustomSql(index)" type="error" quaternary>
-                                        <template #icon>
-                                            <n-icon :component="DeleteFilled" />
-                                        </template>
-                                        {{ t('deleteCustomSql') }}
-                                    </n-button>
-                                </n-space>
-                                <n-input
-                                    v-model:value="item.sql"
-                                    type="textarea"
-                                    :placeholder="t('sqlPlaceholder')"
-                                    :autosize="{ minRows: 2 }"
-                                    class="sql-input"
-                                />
-                            </n-space>
-                        </n-card>
-                        <n-button @click="addCustomSql">
-                            <template #icon>
-                                <n-icon :component="AddFilled" />
-                            </template>
-                            {{ t('addCustomSql') }}
+    <div class="cleanup-settings" :aria-busy="loading || saving || !!runningCleanup">
+        <div class="cleanup-toolbar">
+            <p>{{ t('cronTip') }}</p>
+            <n-button v-if="loaded" type="primary" :loading="saving" :disabled="saving || !!runningCleanup" @click="save">
+                {{ t('save') }}
+            </n-button>
+            <n-button v-else-if="!loading" secondary @click="fetchData">{{ t('retry') }}</n-button>
+        </div>
+        <n-skeleton v-if="loading" text :repeat="4" />
+        <template v-else-if="loaded">
+            <section v-for="group in cleanupGroups" :key="group.title"
+                class="workspace-panel cleanup-panel" :aria-label="t(group.title)">
+                <h2>{{ t(group.title) }}</h2>
+                <div v-for="rule in group.rules" :key="rule.type" class="cleanup-row">
+                    <strong>{{ t(rule.label) }}</strong>
+                    <div class="cleanup-controls">
+                        <n-checkbox v-model:checked="cleanupModel[rule.enabled]" :disabled="saving"
+                            :aria-label="t('enableRule', { rule: t(rule.label) })">{{ t('autoCleanup') }}</n-checkbox>
+                        <n-input-number v-model:value="cleanupModel[rule.days]" :min="0" :max="1000" size="small"
+                            :show-button="false" :disabled="saving"
+                            :input-props="{ 'aria-label': t('ruleDays', { rule: t(rule.label) }) }">
+                            <template #suffix>{{ t('days') }}</template>
+                        </n-input-number>
+                        <n-button size="small" quaternary type="error" :loading="runningCleanup === rule.type"
+                            :disabled="saving || !!runningCleanup || cleanupModel[rule.days] == null"
+                            :aria-label="t('cleanupRule', { rule: t(rule.label) })" @click="confirmCleanup(rule)">
+                            {{ t('cleanupNow') }}
                         </n-button>
-                    </n-space>
-                </n-tab-pane>
-            </n-tabs>
-        </n-card>
+                    </div>
+                </div>
+            </section>
+
+            <details class="workspace-panel cleanup-panel cleanup-sql">
+                <summary>{{ t('customSqlCleanup') }}</summary>
+                <div class="cleanup-sql-content">
+                    <p>{{ t('customSqlTip') }}</p>
+                    <div v-for="(item, index) in cleanupModel.customSqlCleanupList" :key="item.id" class="sql-rule">
+                        <div class="sql-rule-heading">
+                            <n-input v-model:value="item.name" :placeholder="t('sqlNamePlaceholder')" :disabled="saving"
+                                :input-props="{ 'aria-label': t('sqlName') }" />
+                            <n-checkbox v-model:checked="item.enabled" :disabled="saving">{{ t('autoCleanup') }}</n-checkbox>
+                            <n-button type="error" quaternary :disabled="saving" @click="removeCustomSql(index)">
+                                <template #icon><n-icon :component="DeleteFilled" aria-hidden="true" /></template>
+                                {{ t('deleteCustomSql') }}
+                            </n-button>
+                        </div>
+                        <n-input v-model:value="item.sql" type="textarea" :placeholder="t('sqlPlaceholder')"
+                            :input-props="{ 'aria-label': t('sqlStatement'), spellcheck: false }"
+                            :autosize="{ minRows: 2 }" :disabled="saving" class="sql-input" />
+                    </div>
+                    <n-button size="small" :disabled="saving" @click="addCustomSql">
+                        <template #icon><n-icon :component="AddFilled" aria-hidden="true" /></template>
+                        {{ t('addCustomSql') }}
+                    </n-button>
+                </div>
+            </details>
+        </template>
+        <n-modal v-if="pendingCleanup" v-model:show="showCleanupConfirm" preset="dialog" type="error"
+            :title="t('cleanupRule', { rule: pendingCleanup.label })"
+            :content="t('cleanupConfirm', { rule: pendingCleanup.label, days: pendingCleanup.days })"
+            :positive-text="t('cleanupNow')" :negative-text="t('cancel')" :loading="!!runningCleanup"
+            style="width: min(460px, calc(100vw - 32px))" :mask-closable="false" @positive-click="cleanup" />
     </div>
 </template>
 
 <style scoped>
-.n-card {
-    max-width: 800px;
+.cleanup-settings {
+    display: grid;
+    gap: 14px;
+    width: min(100%, 870px);
 }
 
-.center {
+.cleanup-toolbar,
+.cleanup-row,
+.cleanup-controls,
+.sql-rule-heading {
     display: flex;
-    text-align: center;
-    place-items: center;
-    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
 }
 
-.n-alert {
-    margin-bottom: 20px;
+.cleanup-toolbar,
+.cleanup-row {
+    justify-content: space-between;
+}
+
+.cleanup-toolbar p,
+.cleanup-sql-content p {
+    color: var(--mail-muted);
+    font-size: 13px;
+    margin: 0;
+}
+
+.cleanup-toolbar p {
+    flex: 1 1 15rem;
+}
+
+.cleanup-panel h2,
+.cleanup-sql summary {
+    margin: 0;
+    padding: 15px 18px;
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.cleanup-row {
+    min-width: 0;
+    padding: 10px 18px;
+    border-top: 1px solid var(--mail-border);
+}
+
+.cleanup-row strong {
+    font-size: 13px;
+}
+
+.cleanup-controls .n-input-number {
+    width: 5.75rem;
+}
+
+.cleanup-sql summary {
+    cursor: pointer;
+}
+
+.cleanup-sql-content {
+    display: grid;
+    justify-items: start;
+    gap: 12px;
+    padding: 0 18px 15px;
+}
+
+.sql-rule {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--mail-border);
+    border-radius: 9px;
+}
+
+.sql-rule-heading .n-input {
+    flex: 1 1 11rem;
+    min-width: 0;
 }
 
 .sql-input {
-    text-align: left;
+    font-family: ui-monospace, monospace;
+}
+
+@media (max-width: 600px) {
+    .cleanup-row {
+        align-items: start;
+        flex-direction: column;
+    }
 }
 </style>

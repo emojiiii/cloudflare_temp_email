@@ -2,40 +2,25 @@ import { Context } from 'hono'
 
 import i18n from '../i18n';
 import { getBooleanValue } from '../utils';
-import { handleMailListQuery, deleteAddressWithData, updateAddressUpdatedAt } from '../common'
+import { deleteAddressWithData, updateAddressUpdatedAt } from '../common'
 import { resolveRawEmailRow } from '../gzip'
 import { getSendBalanceState } from './send_balance';
 import { renewAddressPasswordLoginToken } from '../address_auth';
+import { listInboxMails, updateInboxReadStatus } from './inbox';
 
 const listMails = async (c: Context<HonoCustomType>) => {
     const { address } = c.get("jwtPayload")
     if (!address) {
         return c.json({ "error": "No address" }, 400)
     }
-    const { limit, offset } = c.req.query();
-    if (Number.parseInt(offset) <= 0) updateAddressUpdatedAt(c, address);
-    return await handleMailListQuery(c,
-        `SELECT * FROM raw_mails where address = ?`,
-        `SELECT count(*) as count FROM raw_mails where address = ?`,
-        [address], limit, offset
-    );
+    const offset = c.req.query('offset');
+    if (offset && Number.parseInt(offset) <= 0) updateAddressUpdatedAt(c, address);
+    return listInboxMails(c, 'raw_mails rm', ['rm.address = ?'], [address]);
 };
 
 const updateMailReadStatus = async (c: Context<HonoCustomType>) => {
-    if (!getBooleanValue(c.env.ENABLE_MAIL_READ_STATUS)) {
-        return c.json({ error: 'Mail read status is disabled' }, 403);
-    }
     const { address } = c.get("jwtPayload");
-    const { id } = c.req.param();
-    const { isUnread } = await c.req.json<{ isUnread?: boolean }>().catch(() => ({ isUnread: undefined }));
-    if (typeof isUnread !== 'boolean') {
-        return c.json({ error: 'isUnread must be a boolean' }, 400);
-    }
-    const value = isUnread ? 1 : 0;
-    const { success } = await c.env.DB.prepare(
-        `UPDATE raw_mails SET is_unread = ? WHERE id = ? AND address = ? AND COALESCE(is_unread, 0) != ?`
-    ).bind(value, id, address, value).run();
-    return c.json({ success });
+    return updateInboxReadStatus(c, ' AND address = ?', [address]);
 };
 
 const getMail = async (c: Context<HonoCustomType>) => {
@@ -67,10 +52,11 @@ const getSettings = async (c: Context<HonoCustomType>) => {
 
     updateAddressUpdatedAt(c, address);
 
-    const { balance } = await getSendBalanceState(c, address);
+    const { balance, isNoLimitSender } = await getSendBalanceState(c, address);
     return c.json({
         address: address,
         send_balance: balance || 0,
+        send_unlimited: isNoLimitSender,
         new_address_token: await renewAddressPasswordLoginToken(c, c.get("jwtPayload")),
     });
 };

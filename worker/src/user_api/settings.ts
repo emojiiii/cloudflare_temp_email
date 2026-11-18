@@ -6,6 +6,8 @@ import { getJsonSetting, getUserRoles } from "../utils"
 import { CONSTANTS } from "../constants";
 import { commonGetUserRole, updateUserAddressesUpdatedAt } from "../common";
 import { Jwt } from "hono/utils/jwt";
+import { getMailTranslationSettings } from '../mails_api/translation';
+import { getCredentialAccount, hasUserDeepSeekKey } from './provider_credentials';
 
 export default {
     openSettings: async (c: Context<HonoCustomType>) => {
@@ -31,16 +33,13 @@ export default {
         })
     },
     settings: async (c: Context<HonoCustomType>) => {
-        const user = c.get("userPayload");
+        c.header('Cache-Control', 'private, no-store');
         const msgs = i18n.getMessagesbyContext(c);
-        // check if user exists
-        const db_user_id = await c.env.DB.prepare(
-            `SELECT id FROM users where id = ?`
-        ).bind(user.user_id).first<number | undefined | null>("id");
-        if (!db_user_id) {
+        const user = await getCredentialAccount(c);
+        if (!user) {
             return c.text(msgs.UserNotFoundMsg, 400);
         }
-        const user_role = await commonGetUserRole(c, db_user_id);
+        const user_role = await commonGetUserRole(c, user.user_id);
         const is_admin = (
             c.env.ADMIN_USER_ROLE
             &&
@@ -64,9 +63,11 @@ export default {
             exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
             iat: Math.floor(Date.now() / 1000),
         }, c.env.JWT_SECRET, "HS256");
+        const translation = getMailTranslationSettings(await hasUserDeepSeekKey(c, user));
         updateUserAddressesUpdatedAt(c, user.user_id);
         return c.json({
             ...user,
+            translation,
             is_admin: is_admin,
             access_token: access_token,
             new_user_token: new_user_token,

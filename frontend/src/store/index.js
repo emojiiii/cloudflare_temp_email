@@ -22,6 +22,8 @@ export const useGlobalState = createGlobalState(
             adminContact: '',
             disableUserSystem: false,
             enableUserCreateEmail: false,
+            receiveOnlyUsers: false,
+            telegramConfigured: false,
             disableAnonymousUserCreateEmail: false,
             disableCustomAddressName: false,
             enableUserDeleteEmail: false,
@@ -39,6 +41,7 @@ export const useGlobalState = createGlobalState(
             enableWebhook: false,
             isS3Enabled: false,
             enableSendMail: false,
+            translation: null,
             showGithub: true,
             showGithubForUser: true,
             disableAdminPasswordCheck: false,
@@ -65,6 +68,7 @@ export const useGlobalState = createGlobalState(
         const settings = ref({
             fetched: false,
             send_balance: 0,
+            send_unlimited: false,
             address: '',
             auto_reply: {
                 subject: '',
@@ -89,9 +93,6 @@ export const useGlobalState = createGlobalState(
         const adminAuth = useStorage('adminAuth', '');
         const jwt = useStorage('jwt', '');
         const addressPassword = useSessionStorage('addressPassword', '');
-        const adminTab = useSessionStorage('adminTab', "account");
-        const adminMailTabAddress = ref("");
-        const adminSendBoxTabAddress = ref("");
         const mailboxSplitSize = useStorage('mailboxSplitSize', 0.25);
         const mailListView = useStorage('mailListView', false);
         const mailListPreviewLineClamp = useStorage('mailListPreviewLineClamp', 1);
@@ -99,12 +100,11 @@ export const useGlobalState = createGlobalState(
         const preferShowTextMail = useStorage('preferShowTextMail', false);
         const userJwt = useStorage('userJwt', '');
         const preferredLocale = useStorage('preferredLocale', '');
-        const userTab = useSessionStorage('userTab', 'address_management');
-        const indexTab = useSessionStorage('indexTab', 'mailbox');
-        const globalTabplacement = useStorage('globalTabplacement', 'top');
         const useSideMargin = useStorage('useSideMargin', true);
         const useUTCDate = useStorage('useUTCDate', false);
         const autoLoadRemoteImages = useStorage('autoLoadRemoteImages', true);
+        const mailTranslationLanguage = useStorage('mailTranslationLanguage', '');
+        const draftTranslationLanguage = useStorage('draftTranslationLanguage', '');
         const autoRefresh = useStorage('autoRefresh', false);
         const configAutoRefreshInterval = useStorage("configAutoRefreshInterval", 60);
         const userOpenSettings = ref({
@@ -114,7 +114,7 @@ export const useGlobalState = createGlobalState(
             /** @type {{ clientID: string, name: string, icon?: string }[]} */
             oauth2ClientIDs: [],
         });
-        const userSettings = ref({
+        const defaultUserSettings = {
             /** @type {boolean} */
             fetched: false,
             /** @type {string} */
@@ -129,7 +129,23 @@ export const useGlobalState = createGlobalState(
             new_user_token: null,
             /** @type {null | {domains: string[] | undefined | null, role: string, prefix: string | undefined | null}} */
             user_role: null,
-        });
+            translation: null,
+        };
+        const userSettings = ref({ ...defaultUserSettings });
+        const resetLoginSessions = () => {
+            if (!openSettings.value.receiveOnlyUsers) return;
+            adminAuth.value = '';
+            showAdminAuth.value = false;
+            userJwt.value = '';
+            userSettings.value = { ...defaultUserSettings };
+            jwt.value = '';
+            settings.value = { ...settings.value, address: '' };
+            addressPassword.value = '';
+            showAddressCredential.value = false;
+        };
+        const isReceiveOnlyAccount = computed(() => openSettings.value.receiveOnlyUsers
+            && !!userSettings.value.user_email && !userSettings.value.is_admin
+        );
         const showUserSystem = computed(() =>
             openSettings.value.fetched && !openSettings.value.disableUserSystem
         );
@@ -170,9 +186,6 @@ export const useGlobalState = createGlobalState(
             jwt,
             adminAuth,
             showAdminAuth,
-            adminTab,
-            adminMailTabAddress,
-            adminSendBoxTabAddress,
             mailboxSplitSize,
             mailListView,
             mailListPreviewLineClamp,
@@ -180,14 +193,15 @@ export const useGlobalState = createGlobalState(
             preferShowTextMail,
             userJwt,
             preferredLocale,
-            userTab,
-            indexTab,
             userOpenSettings,
             userSettings,
-            globalTabplacement,
+            isReceiveOnlyAccount,
+            resetLoginSessions,
             useSideMargin,
             useUTCDate,
             autoLoadRemoteImages,
+            mailTranslationLanguage,
+            draftTranslationLanguage,
             autoRefresh,
             configAutoRefreshInterval,
             telegramApp,

@@ -4,6 +4,7 @@ import {
   deleteAddress,
   deleteAllMailpitMessages,
   onMailpitMessage,
+  seedTestMail,
   WORKER_URL,
 } from '../../fixtures/test-helpers';
 
@@ -72,12 +73,54 @@ test.describe('Send Mail via SMTP', () => {
       expect(sendbox.ok()).toBe(true);
       const { results } = await sendbox.json();
       expect(results).toHaveLength(1);
+      expect(results[0].send_status).toBe('accepted');
       const stored = JSON.parse(results[0].raw);
       expect(stored).toMatchObject(mail);
       expect(stored).not.toHaveProperty('token');
       expect(stored).not.toHaveProperty('extra_credential');
     } finally {
       await deleteAddress(request, jwt);
+    }
+  });
+
+  test('marks the original mailbox message only after an accepted reply', async ({ request }) => {
+    const mailbox = await createTestAddress(request, 'reply-status');
+    const other = await createTestAddress(request, 'other-reply-status');
+    const auth = (jwt: string) => ({ Authorization: `Bearer ${jwt}` });
+    const inbox = async (jwt: string) => {
+      const response = await request.get(`${WORKER_URL}/api/mails?limit=20&offset=0`, { headers: auth(jwt) });
+      expect(response.ok()).toBe(true);
+      return (await response.json()).results[0];
+    };
+    const reply = (mail: { id: number; message_id: string }) => request.post(`${WORKER_URL}/api/send_mail`, {
+      headers: auth(mailbox.jwt),
+      data: {
+        from_name: '', to_name: '', to_mail: 'sender@test.example.com',
+        subject: 'Re: Reply status', content: 'A reply', is_html: false,
+        reply_mail_id: mail.id, in_reply_to: mail.message_id,
+      },
+    });
+    try {
+      await seedTestMail(request, mailbox.address, { subject: 'Reply status' });
+      await seedTestMail(request, other.address, { subject: 'Other reply status' });
+      const original = await inbox(mailbox.jwt);
+      const foreign = await inbox(other.jwt);
+      expect(original.is_replied).toBe(0);
+      expect(foreign.is_replied).toBe(0);
+
+      expect((await reply({ ...original, id: -1 })).status()).toBe(400);
+      expect((await inbox(mailbox.jwt)).is_replied).toBe(0);
+      expect((await reply(foreign)).ok()).toBe(true);
+      expect((await inbox(other.jwt)).is_replied).toBe(0);
+
+      expect((await reply(original)).ok()).toBe(true);
+      expect((await inbox(mailbox.jwt)).is_replied).toBe(1);
+      const sendbox = await request.get(`${WORKER_URL}/api/sendbox?limit=20&offset=0`, { headers: auth(mailbox.jwt) });
+      expect(sendbox.ok()).toBe(true);
+      expect((await sendbox.json()).results.map(row => row.send_status)).toEqual(['accepted', 'accepted']);
+    } finally {
+      await deleteAddress(request, mailbox.jwt);
+      await deleteAddress(request, other.jwt);
     }
   });
 });

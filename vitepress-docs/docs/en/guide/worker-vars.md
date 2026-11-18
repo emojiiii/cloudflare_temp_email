@@ -15,7 +15,7 @@ Unless an entry or its notes describe a different fallback, a `Text/JSON` boolea
 | -------------------------- | ----------- | -------- | ---------------------------------------------------------------------- | -------------------- | ------------------------------------ |
 | `DOMAINS`                  | JSON        | Yes      | All domains for temporary email, supports multiple domains             | None                 | `["awsl.uk", "dreamhunter2333.xyz"]` |
 | `JWT_SECRET`               | Text/Secret | Yes      | Secret key for signing JWTs used in login and authentication. Use a random string, e.g. generated via `openssl rand -hex 32` | None | `a1b2c3d4...` |
-| `ADMIN_PASSWORDS`          | JSON        | No       | Admin console passwords; admin password login is disabled when unset   | `[]`                 | `["123", "456"]`                     |
+| `ADMIN_PASSWORDS`          | Secret/JSON | No       | Admin console passwords. Store a single password directly as a Secret or configure several as a JSON array. Password sign-in is disabled when unset. | `[]` | `["123", "456"]` |
 | `DISABLE_USER_SYSTEM`      | Text/JSON   | No       | Block user system APIs and hide user interfaces                        | `false`              | `true` |
 | `ENABLE_USER_CREATE_EMAIL` | Text/JSON   | No       | Whether to allow users to create mailboxes                             | `false`              | `true` |
 | `ENABLE_USER_DELETE_EMAIL` | Text/JSON   | No       | Whether to allow users to delete emails                                | `false`              | `true` |
@@ -104,6 +104,24 @@ When `ADMIN_API_IP_WHITELIST` is unset or empty, source IPs are not restricted. 
 > ```
 >
 > SMTP and IMAP can use different hostnames, which is useful for reverse proxies or separate port mappings.
+
+## Resend delivery webhook
+
+Store the Resend webhook signing secret as the Worker Secret `RESEND_WEBHOOK_SECRET`. See [delivery status setup](/en/guide/feature/send-mail-api#resend-delivery-status).
+
+## Provider keys and receive-only mode
+
+Initialize D1 or upgrade the existing database to v0.0.15, then set the Worker Secret `CREDENTIALS_ENCRYPTION_KEY` to 32 independently generated random bytes encoded in Base64. The Worker uses it to encrypt provider keys in D1. A database restore requires the same encryption key.
+
+Sign in with the administrator password and open **Settings → Provider keys** to configure the admin DeepSeek key and a Resend key for each sending domain. Existing `DEEPSEEK_API_KEY`, `RESEND_TOKEN`, and per-domain `RESEND_TOKEN_*` values can be moved with **Migrate existing keys**. Verify sending and translation before removing the migrated Worker secrets.
+
+Set `RECEIVE_ONLY_USERS = true` under `[vars]` to let ordinary users create mailboxes, receive email, and translate incoming messages with their own key. Users save their key under **User Center → Settings** and DeepSeek bills their own account. Sending and AI drafting are available to administrators.
+
+## Mail translation
+
+Choose a target language when reading an email and switch back to the original at any time. When writing, preview the translation before applying it. HTML and rich-text translations preserve paragraphs, emphasis, lists, links, and images. DeepSeek receives the text, and the browser inserts the translation into the original structure.
+
+Opening a message displays its saved D1 translation when available. Select **Show original** to switch back. When no translation is saved, the message opens in its original language and DeepSeek receives the body only after you select **Translate**.
 
 ## Email Reception Related Variables
 

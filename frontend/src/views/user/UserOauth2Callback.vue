@@ -7,10 +7,11 @@ import { useGlobalState } from '../../store'
 import { api } from '../../api';
 
 const {
-    userJwt, userOauth2SessionState, userOauth2SessionClientID
+    userJwt, userOauth2SessionState, userOauth2SessionClientID, openSettings, resetLoginSessions,
 } = useGlobalState()
 
 const message = useMessage();
+const notification = useNotification();
 const route = useRoute()
 const router = useRouter()
 const errorInfo = ref('')
@@ -37,7 +38,10 @@ onMounted(async () => {
                 clientID: userOauth2SessionClientID.value
             })
         });
+        if (!openSettings.value.fetched) await api.getOpenSettings(message, notification);
+        resetLoginSessions();
         userJwt.value = res.jwt;
+        if (openSettings.value.receiveOnlyUsers) await api.getUserSettings(message);
         router.push('/user');
     } catch (error) {
         console.error(error);

@@ -1,494 +1,351 @@
 <script setup>
-import { ref, h, computed, onMounted } from 'vue'
-import { useScopedI18n } from '@/i18n/app'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useHead } from '@unhead/vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { useIsMobile } from '../utils/composables'
+import { useMediaQuery } from '@vueuse/core'
+import { useRoute, useRouter } from 'vue-router'
+import { NIcon, useMessage, useNotification } from 'naive-ui'
 import {
-    DarkModeFilled, LightModeFilled, MenuFilled,
-    AdminPanelSettingsFilled, MonitorHeartFilled,
-    KeyboardArrowDownOutlined, OpenInNewOutlined
+    AccountCircleOutlined, InboxOutlined,
+    InfoOutlined, MailOutlineRound, MenuFilled, SendOutlined, SettingsOutlined,
 } from '@vicons/material'
-import { Envelope, GithubAlt, Language, User } from '@vicons/fa'
-
 import { useGlobalState } from '../store'
 import { api } from '../api'
 import { getRouterPathWithLang, hashPassword } from '../utils'
+import { useScopedI18n } from '../i18n/app'
 import { DEFAULT_LOCALE, isSupportedLocale, replaceLocaleInFullPath } from '../i18n/utils'
-import { getLocaleLabel, SUPPORTED_LOCALES } from '../i18n/locale-registry'
+import { mailboxLocation, userLocation } from '../router/workspace-paths'
 import Turnstile from '../components/Turnstile.vue'
-import { NButton, NIcon } from 'naive-ui'
+import WorkspaceNavigation from './workspace/WorkspaceNavigation.vue'
+import WorkspaceUtilities from './workspace/WorkspaceUtilities.vue'
+import { useAdminNavigation } from './workspace/admin-navigation'
 
 const message = useMessage()
 const notification = useNotification()
-
-const {
-    toggleDark, isDark, isTelegram, showAdminPage, showUserSystem,
-    showAuth, auth, loading, openSettings, preferredLocale, userSettings
-} = useGlobalState()
+const props = defineProps({ standalone: Boolean, adminInbox: Boolean })
 const route = useRoute()
 const router = useRouter()
-const isMobile = useIsMobile()
+const { t, locale } = useScopedI18n('views.Header')
+const { t: mailT } = useScopedI18n('views.Index')
+const {
+    railSections, isSettingsView, activeSection: activeAdminSection, activeView: activeAdminView, adminLocation,
+} = useAdminNavigation()
+const {
+    isTelegram, showAdminPage, showUserSystem,
+    showAuth, auth, loading, openSettings, preferredLocale, userSettings, jwt, settings,
+    adminAuth, showAdminAuth, useSimpleIndex, isReceiveOnlyAccount,
+} = useGlobalState()
 
+const isMobile = useMediaQuery('(max-width: 820px)')
 const showMobileMenu = ref(false)
-const menuValue = computed(() => {
-    if (route.path.includes("user")) return "user";
-    if (route.path.includes("admin")) return "admin";
-    return "home";
-});
+const brand = computed(() => openSettings.value.title || t('title'))
+const isMailbox = computed(() => route.meta.workspace === 'mailbox')
+const isAdmin = computed(() => route.meta.workspace === 'admin')
+const isUser = computed(() => route.meta.workspace === 'user')
+const section = computed(() => route.meta.section)
+const mailboxRoute = (section = 'mailbox') => mailboxLocation(section, locale.value)
+const pageRoute = (path) => getRouterPathWithLang(path, locale.value)
+const isPasswordAdmin = computed(() => !!adminAuth.value && !showAdminAuth.value)
+const canNavigateAdmin = computed(() => openSettings.value.fetched && showAdminPage.value
+    && !showAdminAuth.value && !showAuth.value)
+const useAdminMail = computed(() => canNavigateAdmin.value && (isAdmin.value || props.adminInbox || !jwt.value))
+const composeTo = computed(() => {
+    if (!openSettings.value.enableSendMail) return null
+    if (useAdminMail.value) return adminLocation('mails', 'sendMail')
+    return jwt.value && !openSettings.value.receiveOnlyUsers ? mailboxRoute('sendmail') : null
+})
+const composeActive = computed(() => useAdminMail.value
+    ? isAdmin.value && activeAdminView.value.key === 'sendMail'
+    : isMailbox.value && section.value === 'sendmail')
+const sentTo = computed(() => {
+    if (useAdminMail.value) return adminLocation('mails', 'sendBox')
+    if (jwt.value && openSettings.value.enableSendMail && !useSimpleIndex.value && !openSettings.value.receiveOnlyUsers) {
+        return mailboxRoute('sendbox')
+    }
+    return null
+})
+const sentActive = computed(() => useAdminMail.value
+    ? isAdmin.value && activeAdminView.value.key === 'sendBox'
+    : isMailbox.value && section.value === 'sendbox')
+const adminLinks = computed(() => canNavigateAdmin.value
+    ? railSections.value.map(({ key, label, icon }) => ({
+        key, label, icon,
+        to: adminLocation(key),
+        active: isAdmin.value && (key === 'settings' ? isSettingsView.value : activeAdminSection.value.key === key),
+    }))
+    : [])
+const navProps = computed(() => ({
+    title: brand.value,
+    composeTo: composeTo.value,
+    composeActive: composeActive.value,
+    composeLabel: t('compose'),
+    identity: settings.value.address || userSettings.value.user_email || (isPasswordAdmin.value ? 'admin' : ''),
+    navigationLabel: t('menu'),
+    adminLabel: t('admin'),
+    adminLinks: adminLinks.value,
+    primaryLinks: [
+        { key: 'mailbox', label: mailT('inbox'), icon: InboxOutlined,
+            to: isReceiveOnlyAccount.value ? userLocation('user_mail_box_tab', locale.value) : mailboxRoute(),
+            active: isReceiveOnlyAccount.value ? isUser.value && section.value === 'user_mail_box_tab'
+                : (isMailbox.value && section.value === 'mailbox') || (isAdmin.value && activeAdminView.value.key === 'mails') },
+        ...(sentTo.value ? [
+            { key: 'sendbox', label: mailT('sendbox'), icon: SendOutlined, to: sentTo.value, active: sentActive.value },
+        ] : []),
+        ...(jwt.value && !useSimpleIndex.value && !openSettings.value.receiveOnlyUsers ? [
+            { key: 'settings', label: mailT('mailboxSettings'), icon: SettingsOutlined, to: mailboxRoute('accountSettings'),
+                active: isMailbox.value
+                    && ['accountSettings', 'appearance', 'auto_reply', 'webhook', 's3_attachment'].includes(section.value) },
+        ] : []),
+    ],
+    accountLinks: [
+        ...(showUserSystem.value || isPasswordAdmin.value ? [
+            { key: 'user', label: t('userCenter'), icon: AccountCircleOutlined,
+                to: pageRoute(userSettings.value.user_email || isPasswordAdmin.value ? '/user' : '/login'),
+                active: isUser.value && !(isReceiveOnlyAccount.value && section.value === 'user_mail_box_tab') },
+        ] : []),
+        ...(openSettings.value.enableIndexAbout && !useSimpleIndex.value ? [
+            { key: 'about', label: mailT('about'), icon: InfoOutlined, to: mailboxRoute('about'),
+                active: isMailbox.value && section.value === 'about' },
+        ] : []),
+    ],
+}))
 
 const cfToken = ref('')
 const turnstileRef = ref(null)
+const logoClickCount = ref(0)
 
 const authFunc = async () => {
     try {
         await api.fetch('/open_api/site_login', {
             method: 'POST',
-            body: JSON.stringify({
-                password: await hashPassword(auth.value),
-                cf_token: cfToken.value
-            })
-        });
+            body: JSON.stringify({ password: await hashPassword(auth.value), cf_token: cfToken.value }),
+        })
         location.reload()
     } catch (error) {
-        message.error(error.message || "error");
-        turnstileRef.value?.refresh?.();
+        message.error(error.message)
+        turnstileRef.value?.refresh?.()
     }
 }
-
-const languageOptions = SUPPORTED_LOCALES.map((locale) => ({
-    label: getLocaleLabel(locale),
-    value: locale,
-    key: locale,
-}))
-
-const currentLocaleLabel = computed(() => {
-    return languageOptions.find(opt => opt.value === locale.value)?.label || locale.value;
-});
-
-const { t, locale } = useScopedI18n('views.Header')
 
 const changeLocale = async (lang) => {
-    if (!isSupportedLocale(lang)) {
-        return;
-    }
-
-    const currentFullPath = route.fullPath;
-    const targetFullPath = replaceLocaleInFullPath(currentFullPath, lang);
-
-    if (lang === locale.value && targetFullPath === currentFullPath) {
-        showMobileMenu.value = false;
-        return;
-    }
-
-    if (lang === DEFAULT_LOCALE) {
-        preferredLocale.value = DEFAULT_LOCALE;
-    }
-
-    let localeSwitched = false;
-    try {
-        await router.push({ path: targetFullPath, force: true });
-        localeSwitched = router.currentRoute.value.fullPath === targetFullPath;
-        if (!localeSwitched) {
-            await router.replace({ path: targetFullPath, force: true });
-            localeSwitched = router.currentRoute.value.fullPath === targetFullPath;
+    if (!isSupportedLocale(lang)) return
+    const target = replaceLocaleInFullPath(route.fullPath, lang)
+    if (lang === DEFAULT_LOCALE) preferredLocale.value = DEFAULT_LOCALE
+    if (target !== route.fullPath) {
+        try {
+            await router.push(target)
+            if (router.currentRoute.value.fullPath === target) preferredLocale.value = lang
+        } catch (error) {
+            console.error('Failed to switch locale', error)
         }
-    } catch (error) {
-        console.error('Failed to switch locale', error);
-    } finally {
-        showMobileMenu.value = false;
     }
-
-    if (localeSwitched) preferredLocale.value = lang;
+    showMobileMenu.value = false
 }
 
-const version = import.meta.env.PACKAGE_VERSION ? `v${import.meta.env.PACKAGE_VERSION}` : "";
-const showGithubForCurrentUser = computed(() => {
-    if (!openSettings.value.showGithub) return false;
-    if (openSettings.value.showGithubForUser) return true;
-    return showAdminPage.value;
-});
-
-const menuOptions = computed(() => [
-    {
-        label: () => h(NButton,
-            {
-                text: true,
-                size: "small",
-                type: menuValue.value == "home" ? "primary" : "default",
-                style: "width: 100%",
-                onClick: async () => {
-                    await router.push(getRouterPathWithLang('/', locale.value));
-                    showMobileMenu.value = false;
-                }
-            },
-            {
-                default: () => t('mailbox'),
-                icon: () => h(NIcon, { component: Envelope })
-            }),
-        key: "home"
-    },
-    {
-        label: () => h(
-            NButton,
-            {
-                text: true,
-                size: "small",
-                type: menuValue.value == "user" ? "primary" : "default",
-                style: "width: 100%",
-                onClick: async () => {
-                    await router.push(getRouterPathWithLang("/user", locale.value));
-                    showMobileMenu.value = false;
-                }
-            },
-            {
-                default: () => t('userCenter'),
-                icon: () => h(NIcon, { component: User }),
-            }
-        ),
-        key: "user",
-        show: showUserSystem.value && !isTelegram.value
-    },
-    {
-        label: () => h(
-            NButton,
-            {
-                text: true,
-                size: "small",
-                type: menuValue.value == "admin" ? "primary" : "default",
-                style: "width: 100%",
-                onClick: async () => {
-                    loading.value = true;
-                    await router.push(getRouterPathWithLang('/admin', locale.value));
-                    loading.value = false;
-                    showMobileMenu.value = false;
-                }
-            },
-            {
-                default: () => t('admin'),
-                icon: () => h(NIcon, { component: AdminPanelSettingsFilled }),
-            }
-        ),
-        show: showAdminPage.value,
-        key: "admin"
-    },
-    {
-        label: () => h(
-            NButton,
-            {
-                text: true,
-                size: "small",
-                style: "width: 100%",
-                onClick: () => { toggleDark(); showMobileMenu.value = false; }
-            },
-            {
-                default: () => isDark.value ? t('light') : t('dark'),
-                icon: () => h(
-                    NIcon, { component: isDark.value ? LightModeFilled : DarkModeFilled }
-                )
-            }
-        ),
-        key: "theme"
-    },
-    {
-        label: () => h(
-            NButton,
-            {
-                text: true,
-                size: "small",
-                style: "width: 100%",
-                tag: "a",
-                target: "_blank",
-                href: openSettings.value?.statusUrl,
-            },
-            {
-                default: () => t('status'),
-                icon: () => h(NIcon, { component: MonitorHeartFilled })
-            }
-        ),
-        show: !!openSettings.value?.statusUrl,
-        key: "status"
+const logoClick = async () => {
+    if (isAdmin.value) return
+    logoClickCount.value += 1
+    if (logoClickCount.value >= 6) {
+        logoClickCount.value = 0
+        await router.push(adminLocation('account'))
     }
-]);
+}
+
+watch(() => route.fullPath, () => { showMobileMenu.value = false })
+watch(isMobile, (mobile) => { if (!mobile) showMobileMenu.value = false })
 
 useHead({
-    title: () => openSettings.value.title || t('title'),
-    meta: [
-        { name: "description", content: openSettings.value.description || t('title') },
-    ]
-});
-
-const logoClickCount = ref(0);
-const logoClick = async () => {
-    if (route.path.includes("admin")) {
-        logoClickCount.value = 0;
-        return;
-    }
-    if (logoClickCount.value >= 5) {
-        logoClickCount.value = 0;
-        message.info("Change to admin Page");
-        loading.value = true;
-        await router.push(getRouterPathWithLang('/admin', locale.value));
-        loading.value = false;
-    } else {
-        logoClickCount.value++;
-    }
-    if (logoClickCount.value > 0) {
-        message.info(`Click ${5 - logoClickCount.value + 1} times to enter the admin page`);
-    }
-}
+    title: () => brand.value,
+    meta: [{ name: 'description', content: () => openSettings.value.description || brand.value }],
+})
 
 onMounted(async () => {
-    await api.getOpenSettings(message, notification);
-    // make sure user_id is fetched
-    if (showUserSystem.value && !userSettings.value.user_id) await api.getUserSettings(message);
-});
+    await api.getOpenSettings(message, notification)
+    if (showUserSystem.value && !userSettings.value.user_id) await api.getUserSettings(message)
+})
 </script>
 
 <template>
-    <div>
-        <n-page-header>
-            <template #title>
-                <h3>{{ openSettings.title || t('title') }}</h3>
-            </template>
-            <template #avatar>
-                <div @click="logoClick">
-                    <n-avatar class="header-logo" src="/logo.png" />
+    <slot v-if="standalone" />
+    <div v-else class="workspace-shell" :class="{ 'workspace-shell--compact': isTelegram }">
+        <a class="workspace-skip" href="#workspace-main">{{ t('skipToContent') }}</a>
+        <aside v-if="!isMobile && !isTelegram" class="workspace-rail">
+            <WorkspaceNavigation v-bind="navProps" @brand="logoClick">
+                <template #footer>
+                    <WorkspaceUtilities @locale="changeLocale" />
+                    <slot name="rail-footer" />
+                </template>
+            </WorkspaceNavigation>
+        </aside>
+        <div class="workspace-frame">
+            <header v-if="isMobile || isTelegram" class="workspace-bar">
+                <div class="workspace-mobile">
+                    <button v-if="!isTelegram || canNavigateAdmin" class="workspace-icon-button" :aria-label="t('menu')"
+                        :aria-expanded="showMobileMenu" type="button" @click="showMobileMenu = true">
+                        <n-icon :component="MenuFilled" />
+                    </button>
+                    <button class="workspace-mobile-brand" type="button" @click="logoClick">
+                        <n-icon v-if="isTelegram" :component="MailOutlineRound" />
+                        <span>{{ brand }}</span>
+                    </button>
                 </div>
-            </template>
-            <template #extra>
-                <n-space align="center" class="header-extra">
-                    <n-menu v-if="!isMobile" mode="horizontal" :options="menuOptions" responsive />
-                    <n-button v-else :text="true" @click="showMobileMenu = !showMobileMenu">
-                        <template #icon>
-                            <n-icon :component="MenuFilled" />
-                        </template>
-                        {{ t('menu') }}
-                    </n-button>
-                    <n-dropdown v-if="!isMobile" :options="languageOptions" @select="changeLocale" trigger="click" class="header-locale-dropdown">
-                        <n-button text size="small" class="header-locale-button" style="padding: 0 10px;">
-                            <template #icon>
-                                <n-icon :component="Language" />
-                            </template>
-                            {{ currentLocaleLabel }}
-                            <n-icon :component="KeyboardArrowDownOutlined" style="margin-left: 4px;" />
-                        </n-button>
-                    </n-dropdown>
-                    <n-button
-                        v-if="!isMobile && showGithubForCurrentUser"
-                        text
-                        size="small"
-                        class="header-version-button"
-                        tag="a"
-                        target="_blank"
-                        href="https://github.com/dreamhunter2333/cloudflare_temp_email"
-                    >
-                        <template #icon>
-                            <n-icon :component="GithubAlt" />
-                        </template>
-                        {{ version || 'Github' }}
-                    </n-button>
-                </n-space>
-            </template>
-        </n-page-header>
-        <n-drawer v-model:show="showMobileMenu" placement="top" style="height: 100vh;">
-            <n-drawer-content :title="t('menu')" closable>
-                <n-menu :options="menuOptions" />
-                <div class="mobile-menu-actions">
-                    <n-dropdown :options="languageOptions" @select="changeLocale" trigger="click" class="header-locale-dropdown">
-                        <button type="button" class="mobile-menu-utility-button">
-                            <n-icon :component="Language" />
-                            <span class="mobile-menu-action-label">{{ currentLocaleLabel }}</span>
-                            <n-icon :component="KeyboardArrowDownOutlined" class="mobile-menu-action-arrow" />
-                        </button>
-                    </n-dropdown>
-                    <a
-                        v-if="showGithubForCurrentUser"
-                        class="mobile-menu-utility-button"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        href="https://github.com/dreamhunter2333/cloudflare_temp_email"
-                    >
-                        <n-icon :component="GithubAlt" />
-                        <span class="mobile-menu-action-label">{{ version || 'Github' }}</span>
-                        <n-icon :component="OpenInNewOutlined" class="mobile-menu-action-arrow" />
-                    </a>
-                </div>
+                <WorkspaceUtilities v-if="isTelegram" @locale="changeLocale" />
+            </header>
+            <main id="workspace-main" class="workspace-main" tabindex="-1">
+                <slot />
+            </main>
+        </div>
+
+        <n-drawer v-model:show="showMobileMenu" placement="left" :width="248" class="workspace-navigation-drawer">
+            <n-drawer-content closable :title="t('menu')" body-content-style="padding: 0;">
+                <WorkspaceNavigation v-bind="navProps" @brand="logoClick" @navigate="showMobileMenu = false">
+                    <template #footer>
+                        <WorkspaceUtilities @locale="changeLocale" />
+                        <slot name="rail-footer" />
+                    </template>
+                </WorkspaceNavigation>
             </n-drawer-content>
         </n-drawer>
-        <n-modal v-model:show="showAuth" :closable="false" :closeOnEsc="false" :maskClosable="false" preset="dialog"
-            :title="t('accessHeader')">
-            <p>{{ t('accessTip') }}</p>
-            <n-input v-model:value="auth" type="password" show-password-on="click" @keyup.enter="authFunc" />
-            <Turnstile ref="turnstileRef" v-if="openSettings.enableGlobalTurnstileCheck" v-model:value="cfToken" />
-            <template #action>
-                <n-button :loading="loading" @click="authFunc" type="primary">
-                    {{ t('ok') }}
-                </n-button>
-            </template>
-        </n-modal>
+
     </div>
+    <n-modal v-model:show="showAuth" :closable="false" :close-on-esc="false" :mask-closable="false"
+        preset="dialog" :title="t('accessHeader')">
+        <p class="workspace-access-tip">{{ t('accessTip') }}</p>
+        <n-input v-model:value="auth" :input-props="{ autocomplete: 'current-password', 'aria-label': t('accessHeader') }"
+            type="password" show-password-on="click" @keyup.enter="authFunc" />
+        <Turnstile v-if="openSettings.enableGlobalTurnstileCheck" ref="turnstileRef" v-model:value="cfToken" />
+        <template #action>
+            <n-button :loading="loading" type="primary" @click="authFunc">{{ t('ok') }}</n-button>
+        </template>
+    </n-modal>
 </template>
 
 <style scoped>
-.header-logo {
-    margin-left: 10px;
-}
-
-:deep(.n-page-header) {
-    align-items: center;
-    flex-wrap: nowrap;
-}
-
-:deep(.n-page-header__main) {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-}
-
-:deep(.n-page-header__title) {
-    min-width: 0;
-    overflow: hidden;
-}
-
-:deep(.n-page-header__title h3) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-:deep(.n-page-header__extra) {
-    flex: 0 0 auto;
-}
-
-.n-layout-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.header-extra {
-    align-items: center;
-    flex-wrap: nowrap;
-}
-
-.header-extra :deep(.n-space-item) {
-    display: flex;
-    align-items: center;
-}
-
-.header-locale-button {
-    display: inline-flex;
-    align-items: center;
-}
-
-.header-locale-button :deep(.n-button__content) {
-    display: inline-flex;
-    align-items: center;
-}
-
-.header-locale-button :deep(.n-icon) {
-    display: inline-flex;
-    align-items: center;
-}
-
-.header-version-button {
-    display: inline-flex;
-    align-items: center;
-}
-
-.header-version-button :deep(.n-button__content) {
-    display: inline-flex;
-    align-items: center;
-}
-
-.mobile-menu-actions {
+.workspace-shell {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(128, 128, 128, 0.16);
+    grid-template-columns: 208px minmax(0, 1fr);
+    min-height: 100dvh;
 }
 
-.mobile-menu-utility-button {
+.workspace-rail {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    min-width: 0;
+    background: var(--mail-rail);
+    border-inline-end: 1px solid var(--mail-border);
+    overflow-y: auto;
+}
+
+.workspace-frame,
+.workspace-main,
+.workspace-mobile {
+    min-width: 0;
+}
+
+.workspace-frame {
     display: flex;
+    flex-direction: column;
+}
+
+.workspace-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: var(--workspace-header-height);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 0 var(--workspace-gutter-inline);
+    background: var(--mail-bg);
+    border-bottom: 1px solid var(--mail-border);
+}
+
+.workspace-mobile {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.workspace-icon-button,
+.workspace-mobile-brand {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 36px;
-    width: 100%;
-    min-width: 0;
+    gap: 6px;
+    min-width: 37px;
+    min-height: 36px;
     padding: 0 8px;
+    background: transparent;
     border: 0;
     border-radius: 8px;
-    background: transparent;
-    color: inherit;
-    font: inherit;
+    color: var(--mail-muted);
     text-decoration: none;
-    opacity: 0.82;
     cursor: pointer;
 }
 
-.mobile-menu-action-label {
-    margin: 0 6px;
+.workspace-icon-button:hover {
+    background: var(--mail-hover);
+    color: var(--mail-ink);
+}
+
+.workspace-icon-button .n-icon {
+    font-size: 19px;
+}
+
+.workspace-mobile-brand {
+    color: var(--mail-ink);
+    font-weight: 750;
+    letter-spacing: -.02em;
+    padding-inline: 2px;
     min-width: 0;
+}
+
+.workspace-mobile-brand span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.mobile-menu-action-arrow {
-    flex: 0 0 auto;
-    margin-left: 2px;
+.workspace-main {
+    flex: 1;
+    padding: var(--workspace-gutter-block) var(--workspace-gutter-inline);
+    outline: none;
 }
 
-.n-alert {
-    margin-top: 10px;
-    margin-bottom: 10px;
-    text-align: center;
+.workspace-skip {
+    position: fixed;
+    z-index: 30;
+    inset: 0 auto auto 0;
+    transform: translateY(-110%);
+    background: var(--mail-brand);
+    color: #fff;
+    padding: 8px 14px;
 }
 
-.n-card {
-    margin-top: 10px;
+.workspace-skip:focus {
+    transform: none;
 }
 
-.center {
-    display: flex;
-    text-align: left;
-    place-items: center;
-    justify-content: center;
-    margin: 20px;
+.workspace-access-tip {
+    margin: 0 0 14px;
+    color: var(--mail-muted);
 }
 
-.n-form .n-button {
-    margin-top: 10px;
+.workspace-shell--compact {
+    --workspace-header-height: 54px;
+    grid-template-columns: minmax(0, 1fr);
 }
 
-@media (width < 768px) {
-    :deep(.n-page-header) {
-        padding-inline: 16px;
+@media (max-width: 820px) {
+    .workspace-shell {
+        --workspace-header-height: 54px;
+        --workspace-gutter-block: 12px;
+        --workspace-gutter-inline: 12px;
+        grid-template-columns: minmax(0, 1fr);
     }
 
-    .header-logo {
-        margin-left: 0;
+    .workspace-bar {
+        padding-inline-start: 6px;
     }
 }
-
-@media (max-width: 640px) {
-    :deep(.n-page-header) {
-        padding-block: 10px;
-    }
-
-    :deep(.n-page-header__title) {
-        min-width: 0;
-    }
-
-    :deep(.n-page-header__title h3) {
-        max-width: calc(100vw - 104px);
-        margin: 0;
-        font-size: clamp(16px, 5vw, 20px);
-        line-height: 1.2;
-    }
-}
-
 </style>

@@ -130,7 +130,7 @@ const UserBindAddressModule = {
             c,
             `SELECT a.*,`
                 + ` (SELECT COUNT(*) FROM raw_mails WHERE address = a.name) AS mail_count,`
-                + ` (SELECT COUNT(*) FROM sendbox WHERE address = a.name) AS send_count`
+                + ` (SELECT COUNT(*) FROM sendbox WHERE address = a.name AND send_status = 'accepted') AS send_count`
                 + fromQuery,
             `SELECT COUNT(*) AS count${fromQuery}`,
             params,
@@ -158,7 +158,7 @@ const UserBindAddressModule = {
         const { results } = await c.env.DB.prepare(
             `SELECT a.*,`
             + ` (SELECT COUNT(*) FROM raw_mails WHERE address = a.name) AS mail_count,`
-            + ` (SELECT COUNT(*) FROM sendbox WHERE address = a.name) AS send_count`
+            + ` (SELECT COUNT(*) FROM sendbox WHERE address = a.name AND send_status = 'accepted') AS send_count`
             + ` FROM address a `
             + ` JOIN users_address ua `
             + ` ON ua.address_id = a.id `

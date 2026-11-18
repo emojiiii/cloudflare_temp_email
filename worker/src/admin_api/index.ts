@@ -13,11 +13,16 @@ import mail_webhook_settings from './mail_webhook_settings'
 import oauth2_settings from './oauth2_settings'
 import worker_config from './worker_config'
 import admin_mail_api from './admin_mail_api'
-import { sendMailbyAdmin, sendMailByBindingAdmin } from './send_mail'
+import { getAdminSenderOptions, sendMailbyAdmin, sendMailByBindingAdmin } from './send_mail'
+import { getAdminSenderPreferences, updateAdminSenderPreferences } from './sender_preferences'
 import db_api from './db_api'
 import ip_blacklist_settings from './ip_blacklist_settings'
 import ai_extract_settings from './ai_extract_settings'
 import config_api from './config_api'
+import {
+    requireProviderAdmin, getProviderSettings, setAdminDeepSeek, deleteAdminDeepSeek,
+    setAdminResend, deleteAdminResend, migrateAdminProviderSettings,
+} from './provider_credentials'
 import redeem_code_api from '../redeem_api/admin_redeem_code_api'
 
 export const api = new Hono<HonoCustomType>()
@@ -35,6 +40,7 @@ api.post('/admin/address/:id/reset_password', address_api.resetPassword)
 api.get('/admin/mails', admin_mail_api.getMails)
 api.get('/admin/mails_unknow', admin_mail_api.getUnknowMails)
 api.get('/admin/mails/:id', admin_mail_api.getMail)
+api.patch('/admin/mails/:id/read', admin_mail_api.updateMailReadStatus)
 api.delete('/admin/mails/:id', admin_mail_api.deleteMail)
 
 // address sender
@@ -90,6 +96,9 @@ api.post('/admin/mail_webhook/check_filter', mail_webhook_settings.checkWebhookF
 api.get('/admin/worker/configs', worker_config.getConfig)
 
 // send mail by admin
+api.get('/admin/send_mail/options', getAdminSenderOptions)
+api.get('/admin/send_mail/preferences', getAdminSenderPreferences)
+api.patch('/admin/send_mail/preferences', updateAdminSenderPreferences)
 api.post('/admin/send_mail', sendMailbyAdmin)
 api.post('/admin/send_mail_by_binding', sendMailByBindingAdmin)
 
@@ -101,6 +110,16 @@ api.post('admin/db_migration', db_api.migrate)
 // generic admin config
 api.get('/admin/config/:key', config_api.get)
 api.post('/admin/config', config_api.save)
+
+// provider credentials
+api.use('/admin/provider_credentials', requireProviderAdmin)
+api.use('/admin/provider_credentials/*', requireProviderAdmin)
+api.get('/admin/provider_credentials', getProviderSettings)
+api.put('/admin/provider_credentials/deepseek', setAdminDeepSeek)
+api.delete('/admin/provider_credentials/deepseek', deleteAdminDeepSeek)
+api.put('/admin/provider_credentials/resend/:domain', setAdminResend)
+api.delete('/admin/provider_credentials/resend/:domain', deleteAdminResend)
+api.post('/admin/provider_credentials/migrate', migrateAdminProviderSettings)
 
 // redemption codes
 api.use('/admin/redeem_codes', redeem_code_api.requireRedeemCodeEnabled)

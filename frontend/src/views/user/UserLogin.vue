@@ -1,25 +1,31 @@
 <script setup>
 import { useMessage } from 'naive-ui'
-import { onMounted, ref } from "vue";
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useScopedI18n } from '@/i18n/app'
 import { KeyFilled } from '@vicons/material'
 
 import { api } from '../../api';
 import { useGlobalState } from '../../store'
-import { hashPassword } from '../../utils';
+import { getRouterPathWithLang, hashPassword } from '../../utils';
 import { startAuthentication } from '@simplewebauthn/browser';
 
 import Turnstile from '../../components/Turnstile.vue';
 
 const {
-    userJwt, userOpenSettings, openSettings,
-    userOauth2SessionState, userOauth2SessionClientID
+    userJwt, userSettings, userOpenSettings, openSettings, adminAuth, showAdminAuth, loading,
+    userOauth2SessionState, userOauth2SessionClientID, resetLoginSessions,
 } = useGlobalState()
 const message = useMessage();
+const route = useRoute()
+const router = useRouter()
 
-const { t } = useScopedI18n('views.user.UserLogin')
-
+const { t, locale } = useScopedI18n('views.user.UserLogin')
 const tabValue = ref("signin");
+const identifier = ref(route.query.role === 'admin' || openSettings.value.disableUserSystem ? 'admin' : '')
+const signInPassword = ref('')
+const accountOptionsAvailable = computed(() => !openSettings.value.disableUserSystem && identifier.value.trim() !== 'admin')
+const canRecoverPassword = computed(() => userOpenSettings.value.enable && userOpenSettings.value.enableMailVerify)
 const showModal = ref(false);
 const user = ref({
     email: "",
@@ -33,23 +39,39 @@ const signupTurnstileRef = ref(null)
 const resetTurnstileRef = ref(null)
 const loginTurnstileRef = ref(null)
 
-const emailLogin = async () => {
-    if (!user.value.email || !user.value.password) {
-        message.error(t('pleaseInput'));
-        return;
+const finishUserSignIn = async (jwt) => {
+    resetLoginSessions()
+    userJwt.value = jwt
+    await api.getUserSettings(message)
+    if (userSettings.value.user_email) await router.replace(getRouterPathWithLang('/user', locale.value))
+}
+
+const signIn = async () => {
+    const name = identifier.value.trim()
+    const password = signInPassword.value
+    if (!name || !password) {
+        message.error(t('signInRequired'))
+        return
     }
     try {
-        const res = await api.fetch(`/user_api/login`, {
-            method: "POST",
-            body: JSON.stringify({
-                email: user.value.email,
-                // hash password
-                password: await hashPassword(user.value.password),
-                cf_token: loginCfToken.value
-            })
-        });
-        userJwt.value = res.jwt;
-        location.reload();
+        const isAdmin = name === 'admin'
+        const res = await api.fetch(isAdmin ? '/open_api/admin_login' : '/user_api/login', {
+            method: 'POST',
+            body: {
+                ...(isAdmin ? { username: name } : { email: name }),
+                password: await hashPassword(password),
+                cf_token: loginCfToken.value,
+            },
+        })
+        signInPassword.value = ''
+        if (isAdmin) {
+            resetLoginSessions()
+            adminAuth.value = password
+            showAdminAuth.value = false
+            await router.replace(getRouterPathWithLang('/admin', locale.value))
+        } else {
+            await finishUserSignIn(res.jwt)
+        }
     } catch (error) {
         message.error(error.message || "login failed");
         loginTurnstileRef.value?.refresh?.();
@@ -126,6 +148,8 @@ const emailSignup = async () => {
         });
         if (res) {
             tabValue.value = "signin";
+            identifier.value = user.value.email.trim()
+            user.value.password = ''
             message.success(t('pleaseLogin'));
         }
         showModal.value = false;
@@ -153,8 +177,7 @@ const passkeyLogin = async () => {
                 credential
             })
         })
-        userJwt.value = res.jwt;
-        location.reload();
+        await finishUserSignIn(res.jwt)
     } catch (e) {
         console.error(e)
         message.error(e.message)
@@ -173,54 +196,53 @@ const oauth2Login = async (clientID) => {
     }
 };
 
-onMounted(async () => {
-
-});
 </script>
 
 <template>
-    <div class="center">
-        <n-tabs v-model:value="tabValue" size="large" v-if="userOpenSettings.fetched" justify-content="space-evenly">
+    <div class="sign-in">
+        <n-tabs v-model:value="tabValue" size="large">
             <n-tab-pane name="signin" :tab="t('login')">
-                <n-form>
-                    <n-form-item-row :label="t('email')" required>
-                        <n-input v-model:value="user.email" />
+                <n-form size="large" @submit.prevent="signIn">
+                    <n-form-item-row :label="t('identifier')" required>
+                        <n-input v-model:value="identifier"
+                            :input-props="{ 'aria-label': t('identifier'), autocomplete: 'username', autocapitalize: 'none', spellcheck: false }" />
                     </n-form-item-row>
                     <n-form-item-row :label="t('password')" required>
-                        <n-input v-model:value="user.password" type="password" show-password-on="click"
-                            @keyup.enter="emailLogin" />
+                        <n-input v-model:value="signInPassword" type="password" show-password-on="click"
+                            :input-props="{ 'aria-label': t('password'), autocomplete: 'current-password' }" />
                     </n-form-item-row>
                     <Turnstile ref="loginTurnstileRef" v-if="openSettings.enableGlobalTurnstileCheck" v-model:value="loginCfToken" />
-                    <n-button @click="emailLogin" type="primary" block secondary strong>
+                    <n-button attr-type="submit" type="primary" size="large" block strong :loading="loading">
                         {{ t('login') }}
                     </n-button>
-                    <n-button @click="showModal = true" type="info" quaternary size="tiny">
-                        {{ t('forgotPassword') }}
-                    </n-button>
-                    <n-divider />
-                    <n-button @click="passkeyLogin" type="primary" block secondary strong>
-                        <template #icon>
-                            <n-icon :component="KeyFilled" />
-                        </template>
-                        {{ t('loginWithPasskey') }}
-                    </n-button>
-                    <n-button @click="oauth2Login(item.clientID)" v-for="item in userOpenSettings.oauth2ClientIDs"
-                        :key="item.clientID" block secondary strong>
-                        <template #icon v-if="item.icon">
-                            <span class="oauth2-icon" v-html="item.icon"></span>
-                        </template>
-                        {{ t('loginWith', { provider: item.name }) }}
-                    </n-button>
+                    <div v-if="accountOptionsAvailable" class="account-login-links">
+                        <n-button v-if="canRecoverPassword" text @click="showModal = true">
+                            {{ t('forgotPassword') }}
+                        </n-button>
+                        <n-button text @click="passkeyLogin">
+                            <template #icon>
+                                <n-icon :component="KeyFilled" />
+                            </template>
+                            {{ t('loginWithPasskey') }}
+                        </n-button>
+                        <n-button v-for="item in userOpenSettings.oauth2ClientIDs"
+                            :key="item.clientID" text @click="oauth2Login(item.clientID)">
+                            <template #icon v-if="item.icon">
+                                <span class="oauth2-icon" v-html="item.icon"></span>
+                            </template>
+                            {{ t('loginWith', { provider: item.name }) }}
+                        </n-button>
+                    </div>
                 </n-form>
             </n-tab-pane>
-            <n-tab-pane v-if="userOpenSettings.enable" name="signup" :tab="t('register')">
-                <n-form>
+            <n-tab-pane v-if="!openSettings.disableUserSystem && userOpenSettings.enable" name="signup" :tab="t('register')">
+                <n-form size="large" @submit.prevent="emailSignup">
                     <n-form-item-row :label="t('email')" required>
-                        <n-input v-model:value="user.email" />
+                        <n-input v-model:value="user.email" :input-props="{ 'aria-label': t('email'), autocomplete: 'username', type: 'email' }" />
                     </n-form-item-row>
                     <n-form-item-row :label="t('password')" required>
                         <n-input v-model:value="user.password" type="password" show-password-on="click"
-                            @keyup.enter="emailSignup" />
+                            :input-props="{ 'aria-label': t('password'), autocomplete: 'new-password' }" />
                     </n-form-item-row>
                     <Turnstile ref="signupTurnstileRef" v-if="userOpenSettings.enableMailVerify" v-model:value="signupCfToken" />
                     <n-form-item-row v-if="userOpenSettings.enableMailVerify" :label="t('verifyCode')" required>
@@ -234,20 +256,20 @@ onMounted(async () => {
                         </n-input-group>
                     </n-form-item-row>
                     <Turnstile ref="signupTurnstileRef" v-if="!userOpenSettings.enableMailVerify" v-model:value="signupCfToken" />
+                    <n-button attr-type="submit" type="primary" size="large" block strong :loading="loading">
+                        {{ t('register') }}
+                    </n-button>
                 </n-form>
-                <n-button @click="emailSignup" type="primary" block secondary strong>
-                    {{ t('register') }}
-                </n-button>
             </n-tab-pane>
         </n-tabs>
-        <n-modal v-model:show="showModal" style="max-width: 600px;" preset="card" :title="t('forgotPassword')">
-            <n-form v-if="userOpenSettings.enable && userOpenSettings.enableMailVerify">
+        <n-modal v-if="canRecoverPassword" v-model:show="showModal" style="max-width: 600px;" preset="card" :title="t('forgotPassword')">
+            <n-form @submit.prevent="emailSignup">
                 <n-form-item-row :label="t('email')" required>
-                    <n-input v-model:value="user.email" />
+                    <n-input v-model:value="user.email" :input-props="{ 'aria-label': t('email'), autocomplete: 'username', type: 'email' }" />
                 </n-form-item-row>
                 <n-form-item-row :label="t('password')" required>
                     <n-input v-model:value="user.password" type="password" show-password-on="click"
-                        @keyup.enter="emailSignup" />
+                        :input-props="{ 'aria-label': t('password'), autocomplete: 'new-password' }" />
                 </n-form-item-row>
                 <Turnstile ref="resetTurnstileRef" v-model:value="resetCfToken" />
                 <n-form-item-row :label="t('verifyCode')" required>
@@ -260,29 +282,27 @@ onMounted(async () => {
                         </n-button>
                     </n-input-group>
                 </n-form-item-row>
-                <n-button @click="emailSignup" type="primary" block secondary strong>
+                <n-button attr-type="submit" type="primary" block strong :loading="loading">
                     {{ t('resetPassword') }}
                 </n-button>
             </n-form>
-            <n-alert v-else :show-icon="false" :bordered="false">
-                <span>
-                    {{ t('cannotForgotPassword') }}
-                </span>
-            </n-alert>
         </n-modal>
     </div>
 </template>
 
 <style scoped>
-.center {
-    display: flex;
-    text-align: center;
-    place-items: center;
-    justify-content: center;
+.sign-in {
+    width: 100%;
+    min-width: 0;
 }
 
-.n-button {
-    margin-top: 10px;
+.account-login-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    margin-top: 16px;
 }
 
 .oauth2-icon {
